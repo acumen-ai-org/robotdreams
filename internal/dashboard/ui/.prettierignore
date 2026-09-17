@@ -1,0 +1,6 @@
+dist
+smoke-dist
+node_modules
+../web
+*.tgz
+package-lock.json

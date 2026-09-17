@@ -1,0 +1,108 @@
+/* Mission Control palette: every --token style.css reads, declared on .mc-scope; import it or define the same tokens yourself. */
+
+.mc-scope[data-theme="dark"],
+[data-theme="dark"] .mc-scope,
+.mc-scope [data-theme="dark"] {
+  color-scheme: dark;
+  --page: #080a0f;
+  --surface: #10141d;
+  --surface-raised: #151b26;
+  --surface-soft: #1a2230;
+  --surface-head: #141d2b;
+  --text: #f6f3f8;
+  --text-muted: #9ba8b8;
+  --border: #263142;
+  --brand: #a9d9f2;
+  --brand-hover: #c4e8f8;
+  --brand-strong: #7fcbee;
+  --brand-ink: #07131c;
+  --secondary: #ebcfdc;
+  --secondary-fill: #ebcfdc;
+  --warm: #ffd58a;
+  --expressive: #ff9b7a;
+  --focus: #7fcbee;
+  --selected: #ff7ab8;
+  --danger: #ff7f8f;
+  --success: #72d6b1;
+  --shadow: 0 18px 60px rgb(0 0 0 / 40%);
+  --realm-0-bg: #1c5cab;
+  --realm-0-fg: #cde2fb;
+  --realm-1-bg: #9a3d12;
+  --realm-1-fg: #fbd9c8;
+  --realm-2-bg: #0e5f43;
+  --realm-2-fg: #c4eedd;
+  --realm-3-bg: #755000;
+  --realm-3-fg: #f8e5b0;
+  --realm-4-bg: #92375d;
+  --realm-4-fg: #f9d5e3;
+  --realm-5-bg: #2a6410;
+  --realm-5-fg: #cfebc4;
+  --realm-6-bg: #40329b;
+  --realm-6-fg: #dcd6f7;
+  --realm-7-bg: #a02524;
+  --realm-7-fg: #fad2d1;
+  --realm-8-bg: #0e5b76;
+  --realm-8-fg: #c5e8f5;
+  --realm-9-bg: #3e4a57;
+  --realm-9-fg: #dfe3e8;
+  --id-label-bg: #49525c;
+  --id-label-fg: #e7eaee;
+  --site-bg: #59636f;
+  --site-fg: #eef2f6;
+}
+
+.mc-scope,
+.mc-scope[data-theme="light"],
+[data-theme="light"] .mc-scope,
+.mc-scope [data-theme="light"] {
+  color-scheme: light;
+  --page: #f6f3f8;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-soft: #eef5fa;
+  --surface-head: #dbe8f3;
+  --text: #10141d;
+  --text-muted: #465365;
+  --border: #e3e9ef;
+  --brand: #a9d9f2;
+  --brand-hover: #8fcdec;
+  --brand-strong: #174f7d;
+  --brand-ink: #0d2b42;
+  --secondary: #8f5f78;
+  --secondary-fill: #ebcfdc;
+  --warm: #9b6500;
+  --expressive: #b9492e;
+  --focus: #1678aa;
+  --selected: #d6247d;
+  --danger: #b4233b;
+  --success: #147a5a;
+  --shadow: 0 10px 30px rgb(23 79 125 / 10%);
+  --realm-0-bg: #cde2fb;
+  --realm-0-fg: #1c5cab;
+  --realm-1-bg: #fbd9c8;
+  --realm-1-fg: #9a3d12;
+  --realm-2-bg: #c4eedd;
+  --realm-2-fg: #0e5f43;
+  --realm-3-bg: #f8e5b0;
+  --realm-3-fg: #755000;
+  --realm-4-bg: #f9d5e3;
+  --realm-4-fg: #92375d;
+  --realm-5-bg: #cfebc4;
+  --realm-5-fg: #2a6410;
+  --realm-6-bg: #dcd6f7;
+  --realm-6-fg: #40329b;
+  --realm-7-bg: #fad2d1;
+  --realm-7-fg: #a02524;
+  --realm-8-bg: #c5e8f5;
+  --realm-8-fg: #0e5b76;
+  --realm-9-bg: #dfe3e8;
+  --realm-9-fg: #3e4a57;
+  --id-label-bg: #e7eaee;
+  --id-label-fg: #49525c;
+  --site-bg: #cdd4dc;
+  --site-fg: #38424e;
+  --font-heading: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter Variable", "Inter", ui-rounded, system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono Variable", "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}

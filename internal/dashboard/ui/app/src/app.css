@@ -1,0 +1,51 @@
+:root {
+  --app-page: #f6f3f8;
+  --app-text: #10141d;
+  --app-font: "Inter Variable", "Inter", ui-rounded, system-ui, sans-serif;
+  --app-font-heading: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --app-page: #080a0f;
+  --app-text: #f6f3f8;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--app-page);
+  color: var(--app-text);
+}
+
+body {
+  font-family: var(--app-font);
+  font-size: 1rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--app-font-heading);
+  margin: 0;
+}
+
+h2 {
+  font-size: 1.375rem;
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+#root {
+  display: contents;
+}

@@ -1,0 +1,44 @@
+{
+  "name": "mission-control-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "app"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w app",
+    "build": "npm run typecheck && npm run build -w app",
+    "typecheck": "npm run typecheck -w @robotdreams/mission-control && npm run typecheck -w app",
+    "build:lib": "npm run build -w @robotdreams/mission-control",
+    "smoke": "npm run smoke -w @robotdreams/mission-control",
+    "preview": "npm run preview -w app",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.12.0",
+    "jsdom": "^30.1.0",
+    "prettier": "^3.9.7",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.70.0",
+    "vite": "^7.1.3",
+    "vitest": "^5.0.1"
+  }
+}

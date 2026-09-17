@@ -1,0 +1,92 @@
+{
+  "name": "@robotdreams/mission-control",
+  "version": "0.2.0",
+  "description": "Mission Control, the Robot Dreams dashboard, as an unbranded React component library",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./theme.css": "./dist/theme.css",
+    "./views/*": {
+      "types": "./dist/views/*.d.ts",
+      "default": "./dist/views/*.js"
+    },
+    "./panels/*": {
+      "types": "./dist/panels/*.d.ts",
+      "default": "./dist/panels/*.js"
+    },
+    "./components/*": {
+      "types": "./dist/components/*.d.ts",
+      "default": "./dist/components/*.js"
+    },
+    "./state/*": {
+      "types": "./dist/state/*.d.ts",
+      "default": "./dist/state/*.js"
+    },
+    "./hooks/*": {
+      "types": "./dist/hooks/*.d.ts",
+      "default": "./dist/hooks/*.js"
+    },
+    "./lib/*": {
+      "types": "./dist/lib/*.d.ts",
+      "default": "./dist/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "smoke": "vite build -c smoke/vite.config.ts && tsc -p smoke/tsconfig.json",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^9.7.0",
+    "chart.js": "^4.5.0",
+    "d3-array": "^3.2.4",
+    "d3-axis": "^3.0.0",
+    "d3-force": "^3.0.0",
+    "d3-hierarchy": "^3.1.2",
+    "d3-scale": "^4.0.2",
+    "d3-selection": "^3.0.0",
+    "d3-shape": "^3.2.0",
+    "d3-time": "^3.1.0",
+    "d3-time-format": "^4.1.0",
+    "d3-zoom": "^3.0.0",
+    "highlight.js": "^11.11.1",
+    "marked": "^16.1.2",
+    "mermaid": "^11.9.0",
+    "react-chartjs-2": "^5.3.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/d3-array": "^3.2.1",
+    "@types/d3-axis": "^3.0.6",
+    "@types/d3-force": "^3.0.10",
+    "@types/d3-hierarchy": "^3.1.7",
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-shape": "^3.1.7",
+    "@types/d3-time": "^3.0.4",
+    "@types/d3-time-format": "^4.0.3",
+    "@types/d3-zoom": "^3.0.8",
+    "@types/three": "^0.185.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  }
+}
