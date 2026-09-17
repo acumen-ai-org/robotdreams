@@ -9,6 +9,17 @@ version: 2
 
 project_name: dream
 
+# Mission Control's Vite output is not committed (internal/dashboard/web/
+# tracks only a placeholder page; the build lands in the gitignored
+# web/dist/), so build it before the Go builds embed it. Needs Node 22+ on
+# PATH; release.yml sets that up. A failing hook aborts the release.
+before:
+  hooks:
+    - cmd: npm ci
+      dir: internal/dashboard/ui
+    - cmd: npm run build
+      dir: internal/dashboard/ui
+
 builds:
   - id: dream
     main: ./cmd/dream
