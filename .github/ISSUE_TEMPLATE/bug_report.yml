@@ -1,0 +1,78 @@
+name: Bug report
+description: Something in Robot Dreams isn't working as expected.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much
+        detail as you can — it makes the issue reproducible and much faster
+        to fix.
+
+        If this is a security vulnerability, please do **not** open a public
+        issue. Follow the process in [SECURITY.md](../../SECURITY.md) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps or a minimal command/config that reproduces the issue.
+      placeholder: |
+        1. Run `dream ...`
+        2. ...
+        3. See error
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `dream version`, or the git commit you tested against.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      multiple: true
+      options:
+        - CLI (dream)
+        - Control plane / server
+        - Messaging (embedded/webhook/temporal)
+        - Storage (localfs/s3compat)
+        - Security / identity
+        - Reporting
+        - Scheduling
+        - Mission Control (dashboard UI)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please paste any relevant logs or stack traces. This will be rendered as a code block.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Go version, deployment mode (embedded/webhook/temporal, localfs/s3compat), etc.
+    validations:
+      required: false
