@@ -1,0 +1,109 @@
+# Report template: support-queue — customer care. The one business
+# report in the fixture that runs around the clock: support follows
+# USER activity, not office hours, so its volume curve is the streaming
+# curve and its weekends are its busiest days. Categorised as activity
+# (the queue is a live pulse) and failures, because most of what
+# arrives here is somebody else's defect reaching a person.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: support-queue
+description: Contacts, backlog, response times, and satisfaction.
+categories: [activity, failures]
+modalities: [glance, delta]
+stances: [operational, diagnostic]
+
+scope:
+  attach: [site, realm, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Volumes and the backlog sum. Times, satisfaction, contact rate
+    # and deflection are all per-contact rates: they average. Summing
+    # CSAT across two queues would produce a number above the top of
+    # the scale, which is the tell.
+    kpis:
+      tickets_received: sum
+      tickets_resolved: sum
+      backlog: sum
+      first_response_minutes: avg
+      resolution_hours: avg
+      csat: avg
+      contact_rate_per_1k: avg
+      deflection_pct: avg
+    timeline: merge
+    pulse: sample(50)
+
+data:
+  kpis:
+    - { name: tickets_received, unit: count, window: 1h }
+    - { name: tickets_resolved, unit: count, window: 1h }
+    - { name: backlog, unit: count, window: 1h }
+    # An hour is the outer edge of a first response anyone experiences
+    # as support rather than as being ignored.
+    - { name: first_response_minutes, unit: minutes, window: 1h, target: 60, direction: above }
+    - { name: resolution_hours, unit: hours, window: 24h, target: 24, direction: above }
+    # Four and a half of five. Care operations run 4.2-4.6; below four
+    # the queue is being cleared rather than answered.
+    - { name: csat, unit: score, window: 24h, target: 4.5, direction: below }
+    - { name: contact_rate_per_1k, unit: count, window: 24h }
+    - { name: deflection_pct, unit: percent, window: 24h }
+  series:
+    - { name: ticket_rate, unit: per-hour }
+    - { name: csat_trend, unit: score }
+  events:
+    - { type: queue.cleared, severity: info }
+    - { type: ticket.escalated, severity: warn }
+    - { type: sla.breached, severity: warn }
+    - { type: queue.backlog_grew, severity: warn }
+    - { type: surge.detected, severity: critical }
+  tables:
+    # Queue x hour-of-day. Staffing is the decision this panel exists
+    # to inform, and staffing is a question about hours, not about
+    # totals: a queue that is fine on average can be on fire at 02:00.
+    - name: queue_by_hour
+      columns: [row, column, value]
+    # Contact -> past self-serve -> handled by an agent -> escalated.
+    # Monotonically non-increasing by construction: each stage is the
+    # subset of the one before it that was not resolved there.
+    - name: contact_stages
+      columns: [stage, count]
+    - name: aging_tickets
+      columns: [opened, queue, language, waiting, priority, owner]
+    - name: queue_detail
+      columns: [queue, received, resolved, backlog, first_response_minutes, csat]
+    - name: backlog_by_unit
+      columns: [unit, backlog]
+
+facets:
+  summary:
+    status: { from: first_response_minutes, warn_at: 60, critical_at: 120, direction: above }
+    kpis: [tickets_received, backlog, first_response_minutes, csat]
+    sparkline: ticket_rate
+    headline: "{{tickets_received}} contacts this hour, {{backlog}} in backlog, CSAT {{csat}}"
+  timeline:
+    events: [queue.cleared, ticket.escalated, sla.breached, queue.backlog_grew, surge.detected]
+    milestones: [surge.detected]
+  detail:
+    panels:
+      - { title: Contacts per hour, primitive: timeseries, data: series/ticket_rate, section: overview }
+      - { title: First response against target, primitive: kpi_card, data: kpi/first_response_minutes, section: performance }
+      - { title: What happens to a contact, primitive: funnel, data: table/contact_stages, section: drivers }
+      - { title: Backlog by unit, primitive: bar_ranked, data: table/backlog_by_unit, section: drivers }
+      - { title: Queue load by hour of day, primitive: heatmap, data: table/queue_by_hour, section: exceptions }
+      - { title: Tickets past SLA, primitive: datagrid, data: table/aging_tickets, section: exceptions }
+      - { title: Queue detail, primitive: datagrid, data: table/queue_detail, section: detail }
+    drilldown: [incident, quality, activity]
+  pulse:
+    events: [ticket.escalated, sla.breached, surge.detected]
+    rate_limit: 60/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "Which queue is breaching first response, and at what hour?"
+      - "How much of the contact volume is self-serve deflecting?"

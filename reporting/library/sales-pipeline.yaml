@@ -1,0 +1,111 @@
+# Report template: sales-pipeline — the advertising sales desk's weekly
+# read on what it has booked and what it can still book. Two categories
+# because a pipeline is both: `delivery` for the bookings already closed
+# and the inventory already sold, `roadmap` for the coverage and the
+# open deals that say whether next quarter's number is reachable.
+#
+# The one number a sales leader looks at first is coverage — pipeline
+# divided by quota. Below about 3x a quarter does not close, and above
+# about 4x the pipeline is usually full of deals nobody has qualified.
+# That is why coverage carries the status rather than bookings: bookings
+# tell you about the quarter that already happened.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: sales-pipeline
+description: Bookings, pipeline coverage, and what is still open.
+categories: [delivery, roadmap]
+modalities: [glance, delta, narrative]
+stances: [strategic, operational]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      # Money booked adds up across desks; so does nothing else here.
+      bookings_eur: sum
+      # A ratio of two sums. Averaging the desks' coverage is an
+      # approximation of the desk-weighted figure, and the honest one
+      # available without carrying quota as its own KPI.
+      pipeline_coverage: avg
+      win_rate_pct: avg
+      # An average deal size is already a mean; means of means are what
+      # this policy is for.
+      avg_deal_size_eur: avg
+      # Percent of available impressions sold. Never sums.
+      sell_through_pct: avg
+      ecpm_eur: avg
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: bookings_eur, unit: currency, window: 7d, direction: below }
+    # 3-4x is the healthy band; the definition-level target is the floor
+    # of it, and a desk with a longer cycle carries a higher one.
+    - { name: pipeline_coverage, unit: ratio, window: 7d, target: 3.5, direction: below }
+    - { name: win_rate_pct, unit: percent, window: 90d, direction: below }
+    - { name: avg_deal_size_eur, unit: currency, window: 90d }
+    - { name: sell_through_pct, unit: percent, window: 7d, direction: below }
+    - { name: ecpm_eur, unit: currency, window: 7d, direction: below }
+  series:
+    - { name: bookings_rate, unit: per-day }
+    - { name: pipeline_value, unit: currency }
+  events:
+    - { type: pipeline.deal_won, severity: info }
+    - { type: pipeline.deal_lost, severity: warn }
+    - { type: pipeline.coverage_low, severity: warn }
+    - { type: pipeline.quota_at_risk, severity: critical }
+  tables:
+    # Lead to closed-won in process order. A stage a deal can re-enter
+    # would break the funnel's monotonicity, so this counts deals that
+    # reached each stage within the window, not deals sitting in it.
+    - name: pipeline_funnel
+      columns: [stage, count]
+    # Advertiser category is the dimension a sales leader reallocates
+    # on: which verticals are buying, and at what price.
+    - name: bookings_by_category
+      columns: [category, bookings_eur, ecpm_eur]
+    # One row per desk for the department roll-up's ranked bar.
+    - name: bookings_by_unit
+      columns: [unit, bookings_eur]
+    # The deals themselves, which is what the Monday forecast call
+    # actually walks through.
+    - name: open_deals
+      columns: [advertiser, category, stage, value_eur, owner]
+
+facets:
+  summary:
+    status: { from: pipeline_coverage, warn_at: 3.0, critical_at: 2.0, direction: below }
+    kpis: [bookings_eur, pipeline_coverage, win_rate_pct, avg_deal_size_eur, sell_through_pct]
+    sparkline: bookings_rate
+    headline: "{{bookings_eur}} EUR booked at {{pipeline_coverage}}x coverage"
+  timeline:
+    events: [pipeline.deal_won, pipeline.deal_lost, pipeline.coverage_low, pipeline.quota_at_risk]
+    milestones: [pipeline.quota_at_risk]
+  detail:
+    panels:
+      - { title: Bookings rate, primitive: timeseries, data: series/bookings_rate, section: overview }
+      - { title: Coverage against target, primitive: kpi_card, data: kpi/pipeline_coverage, section: performance }
+      - { title: Pipeline stages, primitive: funnel, data: table/pipeline_funnel, section: drivers }
+      - { title: Bookings by advertiser category, primitive: bar_ranked, data: table/bookings_by_category, section: drivers }
+      - { title: Bookings by desk, primitive: bar_ranked, data: table/bookings_by_unit, section: drivers }
+      - { title: Deals needing a decision, primitive: ticker, data: events, section: exceptions }
+      - { title: Open deals, primitive: datagrid, data: table/open_deals, section: detail }
+    drilldown: [roadmap, campaign]
+  pulse:
+    events: [pipeline.deal_won, pipeline.quota_at_risk]
+    rate_limit: 12/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "Is coverage enough to make the quarter?"
+      - "Which advertiser categories are paying the highest eCPM?"
+      - "What did we lose this week, and to what?"

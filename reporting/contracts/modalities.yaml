@@ -1,0 +1,54 @@
+# Consumption modalities: human-facing delivery modes — how report data
+# is ingested with minimal cognitive friction depending on where the
+# reader is. A definition declares which modalities it supports; the
+# consumer picks the one that fits its context. The report doesn't get
+# a vote about where it is read.
+
+version: v1alpha1
+kind: ModalityVocabulary
+
+modalities:
+  - name: narrative
+    description: >
+      Synthesized plain-language summaries: TL;DR banners and bulleted
+      briefings answering what happened, why, and what action is
+      required ("Deployment delayed 12 min due to database locks in
+      step 3").
+  - name: glance
+    description: >
+      Sub-second, low-cognitive-load signals: traffic-light badges,
+      status icons, scorecards, and ambient notifications pushed to
+      passive channels without requiring a report visit.
+  - name: delta
+    description: >
+      Difference-first views: only what changed versus a baseline,
+      previous run, or plan — plus trend/velocity arrows showing
+      direction and speed of change, not just static numbers.
+  - name: spatial
+    description: >
+      Mental-model-matching maps: dependency webs mirroring real
+      infrastructure for tracing blast radius, and collapsible
+      drill-down trees unfolding nested sub-reports.
+  - name: storyboard
+    description: >
+      Linear event consumption: replay/time-travel scrubbing through an
+      incident or run, and time-ordered feeds merging system events,
+      user actions, and errors into one narrative line.
+  - name: board
+    description: >
+      Committed work laid out as work: columns in flow order, swimlanes,
+      horizon buckets. The reader is not reading values — they are
+      scanning for pile-up, for work in progress over its limit, and for
+      the blocked pile that is not moving. Shape carries the message, so
+      a board rendered as a table is not a board.
+
+      Distinct from `storyboard`, which replays what already happened.
+      This is a modality rather than a primitive choice because the same
+      plan is legitimately read as a board, as a delta against its
+      baseline, or as one sentence of narrative; the report doesn't get
+      a vote about which.
+  - name: conversational
+    description: >
+      On-demand ingestion: voice/AI debriefs and interactive Q&A where
+      the reader asks direct questions and gets synthesized answers
+      grounded in the report.

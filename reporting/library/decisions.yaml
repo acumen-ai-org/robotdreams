@@ -1,0 +1,84 @@
+# Report template: decisions — choices awaiting or already made:
+# escalations, approvals, and work blocked on a human. The question a
+# fleet operator actually opens the dashboard to answer: what needs me?
+# Copy, rename, and adapt.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: decisions
+description: Escalations, approvals, and work waiting on a human.
+categories: [decisions]
+modalities: [glance, narrative, storyboard]
+stances: [operational, strategic]
+
+scope:
+  attach: [site, realm, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      open_decisions: sum
+      awaiting_human: sum
+      decided_24h: sum
+      median_wait_minutes: p50
+    timeline: merge
+    pulse: sample(40)
+
+data:
+  kpis:
+    - { name: open_decisions, unit: count }
+    # Anything waiting on a person is work that has stopped, so the
+    # target is zero and the wait target is a couple of hours.
+    - { name: awaiting_human, unit: count, target: 0, direction: above }
+    - { name: decided_24h, unit: count, window: 24h }
+    # A wait time is a p50 when rolled up, never a sum: summing queue
+    # times across squads means nothing.
+    - { name: median_wait_minutes, unit: minutes, target: 120, direction: above }
+  series:
+    - { name: open_decisions_trend, unit: count }
+  events:
+    - { type: decision.requested, severity: info }
+    - { type: decision.made, severity: info }
+    - { type: escalation.raised, severity: warn }
+    - { type: escalation.resolved, severity: info }
+  tables:
+    - name: waiting
+      columns: [since, asked_by, question, blocking]
+    # Stage-and-count rows in process order, for the funnel. Every
+    # contributor reports the same stages; the consumer sums them.
+    - name: decision_stages
+      columns: [stage, count]
+
+facets:
+  summary:
+    status: { from: awaiting_human, warn_at: 1, critical_at: 5, direction: above }
+    kpis: [open_decisions, awaiting_human, median_wait_minutes]
+    sparkline: open_decisions_trend
+    headline: "{{awaiting_human}} waiting on a human, {{decided_24h}} decided today"
+  timeline:
+    events: [decision.requested, decision.made, escalation.raised, escalation.resolved]
+    spans:
+      - { name: decision, start: decision.requested, end: decision.made }
+    milestones: [escalation.raised]
+  detail:
+    panels:
+      - { title: Open decisions, primitive: timeseries, data: series/open_decisions_trend, section: overview }
+      # Where the queue leaks: raised, reached a human, decided.
+      - { title: Decision funnel, primitive: funnel, data: table/decision_stages, section: drivers }
+      # The only section anyone can act on, so it is the one named.
+      - { title: Waiting on a human, primitive: datagrid, data: table/waiting, section: exceptions }
+      - { title: Decision latency, primitive: gantt, data: spans/decision, section: detail }
+    drilldown: [incident, activity]
+  pulse:
+    events: [escalation.raised, decision.requested]
+    rate_limit: 30/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, events, tables]
+    prompts:
+      - "What is waiting on me right now?"
+      - "What has been blocked longest?"

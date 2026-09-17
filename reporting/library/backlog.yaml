@@ -1,0 +1,95 @@
+# Report template: backlog — work that has arrived but has not been
+# planned. The plan before it is a plan.
+#
+# The distinction from `task-board` is arrival vs. flow. A board answers
+# "is what we chose moving?"; a backlog answers "how much did we not
+# choose, and how long has it been waiting?" The number that matters here
+# is age, not throughput: a backlog whose arrival and triage rates match
+# can still be failing everyone in it.
+#
+# Categorised roadmap AND decisions, because triage is a decision and the
+# things nobody triages are the ones that become escalations.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: backlog
+description: Unplanned intake — what arrived, what was triaged, and how long the oldest has waited.
+categories: [roadmap, decisions]
+modalities: [board, glance, delta]
+stances: [operational, strategic]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Counts sum. Oldest takes a max rather than an average, and that is
+    # the whole point: one item waiting ninety days is a fact about the
+    # queue that an average over two hundred fresh ones would hide.
+    kpis:
+      items_waiting: sum
+      items_arrived: sum
+      items_triaged: sum
+      oldest_days: max
+    timeline: merge
+    pulse: sample(20)
+    items: sample(20)
+
+data:
+  kpis:
+    - { name: items_waiting, unit: count }
+    - { name: items_arrived, unit: count, window: 7d }
+    - { name: items_triaged, unit: count, window: 7d }
+    - { name: oldest_days, unit: days, target: 30, direction: above }
+  series:
+    - { name: waiting_trend, unit: count }
+  events:
+    - { type: item.arrived, severity: info }
+    - { type: item.triaged, severity: info }
+    - { type: item.aged_out, severity: warn }
+    - { type: item.rejected, severity: info }
+  tables:
+    - name: age_buckets
+      columns: [age, items]
+    - name: oldest
+      columns: [item, requested_by, waiting_days, lane]
+
+facets:
+  summary:
+    status: { from: oldest_days, warn_at: 30, critical_at: 90, direction: above }
+    kpis: [items_waiting, items_arrived, oldest_days]
+    sparkline: waiting_trend
+    headline: "{{items_waiting}} waiting, {{items_arrived}} arrived this week, oldest {{oldest_days}}d"
+  plan:
+    # Three states and no work in them: everything here is either waiting
+    # to be looked at or has just left. Committed is terminal because the
+    # item's life continues on somebody's board, not on this one. The
+    # words come from the library's shared flow vocabulary, with triaged
+    # as the intake step only a backlog needs.
+    states: [proposed, triaged, committed]
+    lanes: [request, defect, question, risk]
+    commitments: [committed, planned, candidate]
+    levels: [activity, task]
+    size_unit: points
+  timeline:
+    events: [item.arrived, item.triaged, item.aged_out, item.rejected]
+    milestones: [item.aged_out]
+  detail:
+    panels:
+      - { title: Waiting, primitive: kpi_card, data: kpi/items_waiting, section: overview }
+      - { title: Oldest against target, primitive: kpi_card, data: kpi/oldest_days, section: performance }
+      - { title: Age of the queue, primitive: bar_ranked, data: table/age_buckets, section: drivers }
+      - { title: Waiting longest, primitive: datagrid, data: table/oldest, section: exceptions }
+      - { title: The queue, primitive: board, data: items, section: next }
+    drilldown: [task-board, decisions]
+  pulse:
+    events: [item.arrived, item.aged_out]
+    rate_limit: 20/min
+  conversation:
+    grounding: [kpis, tables]
+    prompts:
+      - "What has been waiting longest?"
+      - "Are we triaging as fast as work arrives?"

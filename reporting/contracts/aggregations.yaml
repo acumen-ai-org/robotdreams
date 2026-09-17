@@ -1,0 +1,102 @@
+# Aggregation policies and the scope contract: how N report instances
+# below a scope become one view at that scope. A ReportDefinition
+# declares a policy per facet / per field; a consumer needs only the
+# policy and the instances beneath — never knowledge of what the report
+# means. If rolling a report up requires report-specific code, the
+# scope contract has leaked.
+#
+# Scope paths are labels, not enforced containers (see
+# docs/vision/organization.md): an instance carries a path like
+#   <universe>/<world>/<realm>/<site>
+# with as much or as little depth as the deployment uses.
+
+version: v1alpha1
+kind: AggregationPolicies
+
+scope_levels:
+  # Advisory names for path depth 1..4. A deployment may rename them;
+  # depth is what the code operates on.
+  - universe
+  - world
+  - realm
+  - site
+
+policies:
+  - name: worst
+    applies_to: [status]
+    description: critical beats warn beats ok; absent instances ignored.
+  - name: sum
+    applies_to: [kpis]
+  - name: avg
+    applies_to: [kpis]
+  - name: min
+    applies_to: [kpis]
+  - name: max
+    applies_to: [kpis]
+  - name: p50
+    applies_to: [kpis]
+  - name: p95
+    applies_to: [kpis]
+  - name: latest
+    applies_to: [kpis, headline]
+    description: the value from the most recently produced instance.
+  - name: count
+    applies_to: [kpis, items]
+    description: >
+      For kpis, the number of contributing instances, ignoring values.
+      For items, the column totals with no cards at all — which is the
+      honest universe-level board: four thousand cards is not a view,
+      and "1,204 committed, 91 blocked" is.
+  - name: merge
+    applies_to: [timeline, pulse, series, items]
+    description: >
+      Chronological merge of all contributing streams, each item tagged
+      with its origin scope.
+  - name: sample
+    applies_to: [pulse, timeline, items]
+    parameter: n
+    description: >
+      Merge, then keep at most n items per window so a universe-level
+      view doesn't drown; severity-weighted (failures survive sampling
+      first). For a plan the window is a COLUMN: at most n cards per
+      declared state, chosen by the keep-order below. The column counts
+      stay exact either way — bounding the cards must never move a
+      total, or a rolled-up board becomes a lie about how much work
+      there is.
+  - name: top
+    applies_to: [headline, tables, items]
+    parameter: n
+    description: keep the n highest-ranked items (severity, recency).
+  - name: synthesize
+    applies_to: [headline]
+    description: >
+      Regenerate a summary over the child summaries (requires a model
+      or template engine behind the deployment; MUST degrade to top(1)
+      when none is available — degradation is explicit, never silent).
+
+# How a bounded plan chooses which cards to keep. Fixed, and derived only
+# from what the plan facet DECLARES — never from what an item is about,
+# which is the same rule every other policy here obeys:
+#
+#   1. terminal-state items last  (a done card is a record, not a plan)
+#   2. blocked before unblocked   (the cards a reader must act on)
+#   3. strongest commitment first, in the declared order
+#   4. soonest due first; no due date sorts last
+#   5. earliest declared state, then origin scope, then id
+#
+# The last three keys make the order total, so two consumers bounding the
+# same board drop the same cards.
+item_keep_order: [terminal_last, blocked_first, commitment, due, state, scope, id]
+
+# The time stage. A definition may declare, under
+# scope.aggregation.time, how ONE scope path's instances fold over a
+# period (day|week|month|quarter|year, asked for on the read API) before
+# the scope policies above roll the paths up. Same policy vocabulary, a
+# separate declaration, because the two questions differ: a counter
+# sums both over a week and across sites, a gauge sums across sites but
+# reads `latest` over a week. Without a period the stage is "newest per
+# path", which is what every reader saw before the stage existed.
+time:
+  status: { applies: [worst, latest], default: worst }
+  headline: { applies: [latest, top, synthesize], default: latest }
+  kpis: { applies: [sum, avg, min, max, p50, p95, latest, count], default: latest }

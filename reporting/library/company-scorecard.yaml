@@ -1,0 +1,113 @@
+# Report definition: company-scorecard — the CEO's page, and the only
+# report attached at the universe. Every other definition rolls UP into
+# the root scope; this one is produced there, which is why the root shows
+# something other than a sum of its children.
+#
+# Categorised performance AND cost: the scorecard is the one place the
+# top line and the cost line are read together, because a margin is the
+# relationship between them and neither number means anything alone.
+#
+# Attaches at universe and world. Only the universe actually produces
+# one in the fixture — attach declares where a definition MAY sit, and a
+# division-level scorecard is a legitimate thing for a deployment to add.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: company-scorecard
+description: Users, subscribers, revenue, margin and headcount for the company as a whole.
+categories: [performance, cost]
+modalities: [glance, narrative, delta]
+stances: [strategic]
+
+scope:
+  attach: [universe, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # The interesting policies here are the two that do NOT sum. A user
+    # who listens to music and to podcasts is one MAU, not two, so
+    # audience counts across worlds are overlapping populations rather
+    # than disjoint ones: max is the honest answer and sum is a lie that
+    # looks like growth. Money and people are genuinely disjoint and do
+    # sum. ARPU and margin are ratios.
+    kpis:
+      mau: max
+      premium_subs: max
+      arpu_eur: avg
+      gross_margin_pct: avg
+      revenue_eur: sum
+      opex_eur: sum
+      headcount: sum
+    timeline: merge
+    pulse: sample(10)
+
+data:
+  kpis:
+    - { name: mau, unit: count, window: 30d }
+    # The number the company guides the market on, so it is the one KPI
+    # here carrying a hard target. Lower is worse.
+    - { name: premium_subs, unit: count, window: 30d, target: 276000000, direction: below }
+    - { name: arpu_eur, unit: eur, window: 30d }
+    # Reported gross margin. Below it is a miss, hence direction below.
+    - { name: gross_margin_pct, unit: percent, window: 30d, target: 31.5, direction: below }
+    - { name: revenue_eur, unit: eur, window: 30d }
+    - { name: opex_eur, unit: eur, window: 30d }
+    # Summed from the teams beneath rather than stated separately, so
+    # the scorecard reconciles with the org chart under it.
+    - { name: headcount, unit: count }
+  series:
+    - { name: mau_trend, unit: count }
+    - { name: revenue_trend, unit: eur }
+  events:
+    - { type: scorecard.published, severity: info }
+    - { type: target.met, severity: info }
+    - { type: target.missed, severity: warn }
+    - { type: guidance.revised, severity: warn }
+  tables:
+    # Last month's revenue to this month's, attributed: subscriber
+    # growth, ARPU movement, the ad-supported business, and FX. Four
+    # movements is the whole of it at this altitude — a CEO bridge with
+    # fifteen steps is a finance exercise, not a briefing.
+    - name: revenue_bridge
+      columns: [step, amount, kind]
+    - name: revenue_by_division
+      columns: [unit, revenue_eur]
+    # The metrics behind target, with who owns closing the gap.
+    - name: off_track
+      columns: [metric, owner, actual, target, gap]
+    - name: scorecard
+      columns: [metric, actual, target, variance, trend]
+
+facets:
+  summary:
+    status: { from: gross_margin_pct, warn_at: 30, critical_at: 27, direction: below }
+    kpis: [mau, premium_subs, revenue_eur, gross_margin_pct]
+    sparkline: revenue_trend
+    headline: "{{mau}} MAU and {{premium_subs}} Premium at {{arpu_eur}} ARPU, {{gross_margin_pct}}% gross margin"
+  timeline:
+    events: [scorecard.published, target.met, target.missed, guidance.revised]
+    milestones: [scorecard.published, guidance.revised]
+  detail:
+    panels:
+      - { title: Revenue, primitive: timeseries, data: series/revenue_trend, section: overview }
+      - { title: Monthly active users, primitive: timeseries, data: series/mau_trend, section: overview }
+      - { title: Gross margin against target, primitive: kpi_card, data: kpi/gross_margin_pct, section: performance }
+      - { title: What moved revenue, primitive: waterfall, data: table/revenue_bridge, section: drivers }
+      - { title: Revenue by division, primitive: bar_ranked, data: table/revenue_by_division, section: drivers }
+      - { title: Metrics behind target, primitive: datagrid, data: table/off_track, section: exceptions, stance: strategic }
+      - { title: The scorecard, primitive: datagrid, data: table/scorecard, section: detail }
+    drilldown: [portfolio, budget-variance, subscriber-growth]
+  pulse:
+    events: [target.missed, guidance.revised]
+    rate_limit: 5/min
+  media:
+    archetypes: [anchor, podcast, recap]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "How did the company do this month?"
+      - "What moved revenue against last month?"
+      - "Which divisions carry the top line?"

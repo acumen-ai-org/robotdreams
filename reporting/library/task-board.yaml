@@ -1,0 +1,108 @@
+# Report template: task-board — a team's work in flight.
+#
+# The operational plan: not what we intend over a quarter, but what is on
+# the board right now, how much of it is moving, and where it is stuck.
+# Categorised roadmap AND delivery, because a board is the join between
+# the two — it is the plan at the altitude where it becomes shipping.
+#
+# Attaches at a site only. A board belongs to the team that stands in
+# front of it; a realm-level board is a roll-up, not a thing anyone runs.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: task-board
+description: Work in flight — what is moving, what is blocked, and where the queue is over its limit.
+categories: [roadmap, delivery]
+modalities: [board, glance, delta]
+stances: [operational, strategic]
+
+scope:
+  attach: [site]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Counts sum. Cycle time is a duration and takes a p50 when rolled up:
+    # adding the time two squads' cards took produces a number nothing
+    # experienced.
+    kpis:
+      items_in_flight: sum
+      items_blocked: sum
+      items_done: sum
+      cycle_time_days: p50
+    timeline: merge
+    pulse: sample(30)
+    items: merge
+
+data:
+  kpis:
+    - { name: items_in_flight, unit: count }
+    # Blocked is the number the board is read for, so it carries the
+    # target that makes it an answer rather than an observation.
+    - { name: items_blocked, unit: count, target: 0, direction: above }
+    - { name: items_done, unit: count, window: 7d }
+    - { name: cycle_time_days, unit: days, target: 5, direction: above }
+  series:
+    - { name: remaining_trend, unit: count }
+    - { name: done_trend, unit: count }
+  events:
+    - { type: item.started, severity: info }
+    - { type: item.blocked, severity: warn }
+    - { type: item.unblocked, severity: info }
+    - { type: item.delivered, severity: info }
+    - { type: wip.exceeded, severity: warn }
+  tables:
+    - name: blocked
+      columns: [item, owner, blocked_days, waiting_on]
+    - name: by_owner
+      columns: [owner, in_flight, done]
+
+facets:
+  summary:
+    status: { from: items_blocked, warn_at: 2, critical_at: 5, direction: above }
+    kpis: [items_in_flight, items_blocked, cycle_time_days]
+    sparkline: remaining_trend
+    headline: "{{items_in_flight}} in flight, {{items_blocked}} blocked, {{cycle_time_days}}d cycle time"
+  plan:
+    # The shared flow vocabulary, with review — the column work goes to
+    # wait in — as the step only a working board needs.
+    states: [proposed, committed, in_progress, review, done]
+    lanes: [feature, defect, chore]
+    commitments: [committed, planned]
+    levels: [task, subtask]
+    size_unit: points
+    # Per team, set where a squad of six actually sits rather than where
+    # it would like to: a limit everyone breaches every day is not a
+    # limit, it is a complaint, and the column would stop being a signal.
+    # Review is the tightest because review is where work goes to wait.
+    #
+    # Proposed and done are unbounded on purpose: a limit on the intake
+    # is a filing rule, and a limit on done is nothing at all.
+    wip_limits: { committed: 8, in_progress: 6, review: 5 }
+    baseline: { name: Sprint commitment, ref: series/remaining_trend }
+  timeline:
+    events: [item.started, item.blocked, item.unblocked, item.delivered, wip.exceeded]
+    spans:
+      - { name: item, start: item.started, end: item.delivered }
+    milestones: [item.delivered]
+  detail:
+    panels:
+      - { title: In flight, primitive: kpi_card, data: kpi/items_in_flight, section: overview }
+      - { title: Cycle time against target, primitive: kpi_card, data: kpi/cycle_time_days, section: performance }
+      - { title: Load by owner, primitive: bar_ranked, data: table/by_owner, section: drivers }
+      - { title: Blocked, primitive: datagrid, data: table/blocked, section: exceptions }
+      - { title: The board, primitive: board, data: items, section: next }
+      - { title: Burndown, primitive: burndown, data: series/remaining_trend, section: next }
+    drilldown: [delivery, decisions]
+  pulse:
+    events: [item.blocked, item.delivered, wip.exceeded]
+    rate_limit: 30/min
+  media:
+    archetypes: [recap]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "What is blocked, and on whom?"
+      - "Which column is over its limit?"

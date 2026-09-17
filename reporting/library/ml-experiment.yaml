@@ -1,0 +1,105 @@
+# Report definition: ml-experiment — what the research teams are
+# testing, and what any of it proved. Daily, because that is how often
+# an experiment readout changes.
+#
+# The honest version of this report is mostly negative: most tests are
+# inconclusive or flat, a single-digit-percent lift on a primary metric
+# is a large win, and the interesting row is usually the one that hurt
+# a guardrail. A report where everything wins by 30% is a report nobody
+# who has run an experiment will believe.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: ml-experiment
+description: Experiments running, what concluded, what shipped, and what breached a guardrail.
+categories: [quality, roadmap]
+modalities: [narrative, delta, glance]
+stances: [diagnostic, strategic]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      experiments_running: sum
+      experiments_shipped: sum
+      guardrail_breaches: sum
+      # Exposure is the share of users under test and conclusiveness is
+      # a rate; both average.
+      exposure_pct: avg
+      conclusive_pct: avg
+      # The best result in a portfolio of tests is the best one, not
+      # the sum of them and not their mean.
+      best_lift_pct: max
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: experiments_running, unit: count }
+    - { name: exposure_pct, unit: percent }
+    # No target: how many tests reach significance is a property of the
+    # question being asked, not a number a team can promise.
+    - { name: conclusive_pct, unit: percent }
+    - { name: best_lift_pct, unit: percent }
+    - { name: experiments_shipped, unit: count, window: 30d }
+    # A test that moved a protected metric the wrong way. The only
+    # number on this page a team commits to, and it commits to zero.
+    - { name: guardrail_breaches, unit: count, window: 30d, target: 0, direction: above }
+  series:
+    - { name: exposure_trend, unit: percent }
+  events:
+    - { type: experiment.started, severity: info }
+    - { type: experiment.concluded, severity: info }
+    - { type: experiment.shipped, severity: info }
+    - { type: experiment.stopped, severity: warn }
+    - { type: guardrail.breached, severity: critical }
+  tables:
+    # Thirty days of tests narrowing: started, reached sample size,
+    # reached significance, shipped. The drop from enrolled to
+    # conclusive is where most experimentation programmes actually
+    # live.
+    - name: experiment_stages
+      columns: [stage, count]
+    - name: experiments
+      columns: [experiment, primary_metric, lift_pct, significance, decision]
+    - name: guardrails
+      columns: [experiment, guardrail, movement, action]
+    - name: experiments_by_unit
+      columns: [unit, experiments_running]
+
+facets:
+  summary:
+    status: { from: guardrail_breaches, warn_at: 1, critical_at: 3, direction: above }
+    kpis: [experiments_running, exposure_pct, conclusive_pct, experiments_shipped]
+    sparkline: exposure_trend
+    headline: "{{experiments_running}} running at {{exposure_pct}}% exposure, {{experiments_shipped}} shipped"
+  timeline:
+    events: [experiment.started, experiment.concluded, experiment.shipped, experiment.stopped, guardrail.breached]
+    # An experiment is a period with a readout at the end, so it reads
+    # as a bar rather than as two unrelated dots.
+    spans:
+      - { name: experiment, start: experiment.started, end: experiment.concluded }
+    milestones: [experiment.shipped, guardrail.breached]
+  detail:
+    panels:
+      - { title: Traffic under test, primitive: timeseries, data: series/exposure_trend, section: overview }
+      - { title: Exposed to shipped, primitive: funnel, data: table/experiment_stages, section: drivers }
+      - { title: Tests running by unit, primitive: bar_ranked, data: table/experiments_by_unit, section: drivers }
+      - { title: Guardrail breaches, primitive: datagrid, data: table/guardrails, section: exceptions }
+      - { title: Every experiment, primitive: datagrid, data: table/experiments, section: detail }
+    drilldown: [quality, data-pipeline]
+  pulse:
+    events: [experiment.shipped, experiment.stopped, guardrail.breached]
+    rate_limit: 20/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, series, events, tables]
+    prompts:
+      - "Which experiments actually reached significance this month?"
+      - "Has anything shipped that hurt a guardrail metric?"

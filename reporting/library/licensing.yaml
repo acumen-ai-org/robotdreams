@@ -1,0 +1,111 @@
+# Report definition: licensing — the rights the catalogue rests on.
+# Weekly, because deal-making moves in weeks: redlines come back, a
+# committee meets, paper gets signed. Produced by the teams that sit
+# across the table from labels, publishers, collecting societies and
+# audiobook publishers.
+#
+# The report exists to answer one question a rights lead is asked every
+# Monday: what expires soon, and is any of it unsigned? Everything else
+# on the page is context for that.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: licensing
+description: Deals, renewals, minimum guarantees, and open rights disputes.
+categories: [roadmap, decisions]
+modalities: [narrative, delta, glance]
+stances: [strategic, operational]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      deals_in_negotiation: sum
+      renewals_due_90d: sum
+      minimum_guarantees_eur: sum
+      disputes_open: sum
+      # Territories do NOT sum: two teams clearing the same 184 markets
+      # have cleared 184 markets, not 368. The roll-up question is how
+      # far the widest clearance reaches.
+      territories_cleared: max
+    timeline: merge
+    pulse: sample(10)
+
+data:
+  kpis:
+    - { name: deals_in_negotiation, unit: count }
+    # Renewals inside the 90-day window: the number the weekly review
+    # is actually about.
+    - { name: renewals_due_90d, unit: count, window: 90d }
+    - { name: minimum_guarantees_eur, unit: eur }
+    - { name: disputes_open, unit: count }
+    # 184 is the company's market count, and full clearance is the
+    # standing ask: a market we cannot serve is a market we do not have.
+    - { name: territories_cleared, unit: count, target: 184, direction: below }
+  series:
+    - { name: negotiation_pipeline, unit: count }
+  events:
+    - { type: renewal.opened, severity: info }
+    - { type: deal.signed, severity: info }
+    - { type: renewal.due, severity: warn }
+    - { type: dispute.raised, severity: warn }
+    - { type: dispute.resolved, severity: info }
+    - { type: deal.escalated, severity: critical }
+  tables:
+    # Which kind of counterparty the desk is spending its weeks on:
+    # major label, indie aggregator, publisher, CMO/PRO, audiobook
+    # publisher. Ranked, because the ordering IS the point.
+    - name: deals_by_counterparty
+      columns: [counterparty_type, deals]
+    # The exceptions table: what expires inside 90 days and whether
+    # there is signed paper behind it.
+    - name: renewals_due
+      columns: [expires, counterparty, territory, mg_eur, status]
+    # The bridge from last quarter's committed minimum guarantees to
+    # this one's: new deals up, expiries down, renegotiations either
+    # way. kind is `total` at the ends and `delta` between.
+    - name: mg_bridge
+      columns: [step, amount, kind]
+    - name: deals_by_unit
+      columns: [unit, deals_in_negotiation]
+
+facets:
+  summary:
+    # An unsigned renewal inside 90 days is the classic thing that
+    # turns into a takedown notice, so it is what colours the tile.
+    status: { from: renewals_due_90d, warn_at: 4, critical_at: 8, direction: above }
+    kpis: [deals_in_negotiation, renewals_due_90d, minimum_guarantees_eur, disputes_open]
+    sparkline: negotiation_pipeline
+    headline: "{{deals_in_negotiation}} deals live, {{renewals_due_90d}} renewals inside 90 days, {{disputes_open}} disputes open"
+  timeline:
+    events: [renewal.opened, deal.signed, renewal.due, dispute.raised, dispute.resolved, deal.escalated]
+    # A renewal is a period, not a moment: it opens when notice is
+    # served and closes when paper is signed, and the gap between is
+    # the risk.
+    spans:
+      - { name: renewal, start: renewal.opened, end: deal.signed }
+    milestones: [deal.signed, deal.escalated]
+  detail:
+    panels:
+      - { title: Deals in negotiation, primitive: timeseries, data: series/negotiation_pipeline, section: overview }
+      - { title: Renewal windows, primitive: gantt, data: spans/renewal, section: performance }
+      - { title: What moved committed guarantees, primitive: waterfall, data: table/mg_bridge, section: drivers }
+      - { title: Deals by counterparty, primitive: bar_ranked, data: table/deals_by_counterparty, section: drivers }
+      - { title: Deals by unit, primitive: bar_ranked, data: table/deals_by_unit, section: drivers }
+      - { title: Expiring inside 90 days, primitive: datagrid, data: table/renewals_due, section: exceptions }
+    drilldown: [catalog, legal-matters]
+  pulse:
+    events: [renewal.due, dispute.raised, deal.escalated]
+    rate_limit: 10/min
+  media:
+    archetypes: [anchor]
+  conversation:
+    grounding: [kpis, series, events, tables]
+    prompts:
+      - "Which renewals expire in the next 90 days without signed paper?"
+      - "What changed our committed minimum guarantees this quarter?"

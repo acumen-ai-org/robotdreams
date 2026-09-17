@@ -1,0 +1,72 @@
+# Report template: incident — errors, degradations, rollbacks, and
+# their lifecycle. Copy, rename, and adapt.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: incident
+description: Failures and incidents, from detection to resolution.
+categories: [failures]
+modalities: [glance, narrative, delta, storyboard, spatial]
+stances: [operational, diagnostic]
+
+scope:
+  attach: [site, realm, world]
+  aggregation:
+    status: worst
+    headline: top(3)
+    kpis:
+      open_incidents: sum
+      resolved_incidents: sum
+      mttr_minutes: p50
+    timeline: merge
+    pulse: sample(30)
+
+data:
+  kpis:
+    - { name: open_incidents, unit: count, target: 0, direction: above }
+    - { name: resolved_incidents, unit: count, window: 24h }
+    - { name: mttr_minutes, unit: minutes, window: 7d, target: 60, direction: above }
+  series:
+    - { name: error_rate, unit: per-minute }
+  events:
+    - { type: incident.opened, severity: critical }
+    - { type: incident.mitigated, severity: warn }
+    - { type: incident.resolved, severity: info }
+  tables:
+    - name: open_list
+      columns: [opened, severity, scope, summary, owner]
+    - name: incidents_by_unit
+      columns: [unit, open_incidents]
+
+facets:
+  summary:
+    status: { from: open_incidents, warn_at: 1, critical_at: 2, direction: above }
+    kpis: [open_incidents, mttr_minutes]
+    sparkline: error_rate
+    headline: "{{open_incidents}} open, MTTR {{mttr_minutes}}m"
+  timeline:
+    events: [incident.opened, incident.mitigated, incident.resolved]
+    spans:
+      - { name: incident, start: incident.opened, end: incident.resolved }
+  detail:
+    panels:
+      - { title: Error rate, primitive: timeseries, data: series/error_rate, section: overview }
+      - { title: Time to restore, primitive: kpi_card, data: kpi/mttr_minutes, section: performance }
+      - { title: Where incidents land, primitive: bar_ranked, data: table/incidents_by_unit, section: drivers }
+      # The only panel anyone acts on, so it is the one named.
+      - { title: Open incidents, primitive: datagrid, data: table/open_list, section: exceptions }
+      - { title: Incident windows, primitive: gantt, data: spans/incident, section: detail }
+    drilldown: [logs, performance]
+  pulse:
+    events: [incident.opened, incident.mitigated, incident.resolved]
+    rate_limit: 60/min
+  media:
+    archetypes: [recap, podcast]
+  conversation:
+    grounding: [kpis, events, tables]
+    prompts:
+      - "What is currently on fire?"
+      - "Walk me through the last incident."

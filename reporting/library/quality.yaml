@@ -1,0 +1,81 @@
+# Report template: quality — whether the work was right. Distinct from
+# delivery (which counts what shipped) and from failures (which counts
+# what broke): work can ship, not break, and still be wrong twice before
+# it is accepted. Copy, rename, and adapt.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: quality
+description: Review outcomes, acceptance, and rework.
+categories: [quality]
+modalities: [glance, delta, narrative]
+stances: [operational, diagnostic]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      reviews: sum
+      accepted: sum
+      rework: sum
+      # A rate is averaged, never summed — three squads at 90% do not
+      # make 270%.
+      acceptance_rate: avg
+    timeline: merge
+    pulse: sample(30)
+
+data:
+  kpis:
+    - { name: reviews, unit: count, window: 24h }
+    - { name: accepted, unit: count, window: 24h }
+    - { name: rework, unit: count, window: 24h }
+    # Below 85% accepted, the review loop is costing more than it saves.
+    - { name: acceptance_rate, unit: percent, target: 85, direction: below }
+  series:
+    - { name: acceptance_trend, unit: percent }
+  events:
+    - { type: review.passed, severity: info }
+    - { type: review.failed, severity: warn }
+    - { type: rework.started, severity: warn }
+  tables:
+    - name: recent_reviews
+      columns: [when, artifact, reviewer, outcome]
+    # Stage-and-count rows in process order, for the funnel.
+    - name: acceptance_by_unit
+      columns: [unit, acceptance_rate]
+    - name: review_stages
+      columns: [stage, count]
+
+facets:
+  summary:
+    status: { from: acceptance_rate, warn_at: 85, critical_at: 70, direction: below }
+    kpis: [reviews, accepted, rework]
+    sparkline: acceptance_trend
+    headline: "{{accepted}} of {{reviews}} accepted, {{rework}} sent back"
+  timeline:
+    events: [review.passed, review.failed, rework.started]
+    spans:
+      - { name: review, start: rework.started, end: review.passed }
+  detail:
+    panels:
+      - { title: Acceptance rate, primitive: timeseries, data: series/acceptance_trend, section: overview }
+      # Submitted work narrowing to accepted work: the gap is rework.
+      - { title: Review funnel, primitive: funnel, data: table/review_stages, section: drivers }
+      - { title: Acceptance by unit, primitive: bar_ranked, data: table/acceptance_by_unit, section: drivers }
+      - { title: Recent reviews, primitive: datagrid, data: table/recent_reviews, section: detail }
+    drilldown: [delivery, incident]
+  pulse:
+    events: [review.failed, rework.started]
+    rate_limit: 30/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, series, events, tables]
+    prompts:
+      - "What is getting sent back most often?"
+      - "Is acceptance improving or sliding?"

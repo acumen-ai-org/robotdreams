@@ -1,0 +1,98 @@
+# Report template: plan — what a department has committed to doing next.
+#
+# The generic forward-looking template for the roadmap category, and the
+# companion to `roadmap`: roadmap reports whether the plan is holding
+# (milestones hit, missed, slipped), this reports what the plan IS. One
+# looks backward at a commitment, the other states it.
+#
+# Attaches at realm and world, because planning is what a department lead
+# and a VP both do — the altitude changes the size of the item, not the
+# shape of the report.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: plan
+description: Committed work by horizon — what is next, who owns it, what is at risk of slipping.
+categories: [roadmap]
+modalities: [board, narrative, delta]
+stances: [strategic]
+
+scope:
+  attach: [realm, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Items and effort sum. Confidence is a ratio and averages: adding two
+    # departments' confidence produces a number above 100 that means
+    # nothing.
+    kpis:
+      items_committed: sum
+      items_slipped: sum
+      effort_committed: sum
+      confidence_pct: avg
+    timeline: merge
+    pulse: sample(10)
+    items: sample(25)
+
+data:
+  kpis:
+    - { name: items_committed, unit: count }
+    # The number this report exists for. Some slip is honest; a plan that
+    # slips a quarter of itself was not a plan.
+    - { name: items_slipped, unit: count, window: 30d, target: 3, direction: above }
+    - { name: effort_committed, unit: days }
+    - { name: confidence_pct, unit: percent, target: 70, direction: below }
+  series:
+    - { name: committed_trend, unit: count }
+  events:
+    - { type: plan.committed, severity: info }
+    - { type: plan.rescheduled, severity: warn }
+    - { type: item.delivered, severity: info }
+    - { type: item.blocked, severity: warn }
+  tables:
+    - name: by_horizon
+      columns: [horizon, items, effort_days]
+    - name: slipped
+      columns: [item, owner, was_due, now_due, reason]
+
+facets:
+  summary:
+    status: { from: items_slipped, warn_at: 3, critical_at: 8, direction: above }
+    kpis: [items_committed, items_slipped, confidence_pct]
+    sparkline: committed_trend
+    headline: "{{items_committed}} committed, {{items_slipped}} slipped, {{confidence_pct}}% confidence"
+  plan:
+    # A subset of the library's shared flow vocabulary (see
+    # contracts/facets.yaml): aligned columns are what let several
+    # plans aggregate into one board at a wide scope.
+    states: [proposed, committed, in_progress, done]
+    lanes: [product, platform, operations, compliance]
+    horizons: [now, next, later]
+    commitments: [committed, planned, candidate]
+    levels: [initiative, workstream, activity]
+    size_unit: days
+    baseline: { name: Committed effort, ref: kpi/effort_committed }
+  timeline:
+    events: [plan.committed, plan.rescheduled, item.delivered, item.blocked]
+    milestones: [item.delivered]
+  detail:
+    panels:
+      - { title: Committed work, primitive: kpi_card, data: kpi/items_committed, section: overview }
+      - { title: Confidence against target, primitive: kpi_card, data: kpi/confidence_pct, section: performance }
+      - { title: Effort by horizon, primitive: bar_ranked, data: table/by_horizon, section: drivers }
+      - { title: What slipped, primitive: datagrid, data: table/slipped, section: exceptions, stance: strategic }
+      - { title: The plan, primitive: roadmap_lanes, data: items, section: next }
+      - { title: Committed over time, primitive: timeseries, data: series/committed_trend, section: detail }
+    drilldown: [roadmap, task-board, decisions]
+  pulse:
+    events: [plan.rescheduled, item.blocked, item.delivered]
+  media:
+    archetypes: [anchor]
+  conversation:
+    grounding: [kpis, events, tables]
+    prompts:
+      - "What have we committed to this quarter?"
+      - "What slipped, and why?"

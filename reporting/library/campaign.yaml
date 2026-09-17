@@ -1,0 +1,119 @@
+# Report template: campaign — what marketing spent yesterday and what
+# it bought. Two categories on purpose: `delivery` because a campaign is
+# work that shipped (creative live, budget pacing, impressions served),
+# and `performance` because the question the CMO actually asks is
+# whether the money is working.
+#
+# The definition covers both brand and performance spend, which are not
+# the same job. Brand flights buy reach and are measured badly on
+# purpose — attribution windows do not capture what a Wrapped push does
+# to demand three months later. Performance and lifecycle spend is
+# measured directly and is expected to clear its ROAS. Rather than split
+# into two definitions with the same six fields, the targets are carried
+# per team on the instance, so a brand team's €55 CAC is read against a
+# brand team's number and not against performance marketing's.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: campaign
+description: Marketing spend, reach, and what it acquired.
+categories: [delivery, performance]
+modalities: [glance, delta]
+stances: [strategic, operational]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      # Money out, impressions served, and people acquired all add up
+      # across channels and teams.
+      spend_eur: sum
+      impressions: sum
+      conversions: sum
+      # Ratios. A click-through rate is clicks over impressions and a
+      # blended one is only correct when weighted by impressions; avg
+      # is the approximation, and the by-channel table underneath is
+      # what a marketer recomputes from when the answer matters.
+      ctr_pct: avg
+      cac_eur: avg
+      roas: avg
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: spend_eur, unit: currency, window: 24h }
+    - { name: impressions, unit: count, window: 24h }
+    - { name: ctr_pct, unit: percent, window: 24h, direction: below }
+    # Cost to acquire one paying subscriber. No definition-level target:
+    # brand and performance spend differ by roughly a factor of six, so
+    # a shared default would be wrong for every team that carries it.
+    - { name: cac_eur, unit: currency, window: 24h, direction: above }
+    - { name: roas, unit: ratio, window: 24h, direction: below }
+    - { name: conversions, unit: count, window: 24h, direction: below }
+  series:
+    - { name: spend_rate, unit: per-hour }
+    - { name: cac_trend, unit: currency }
+  events:
+    - { type: campaign.launched, severity: info }
+    - { type: campaign.cac_breach, severity: warn }
+    - { type: campaign.creative_rejected, severity: warn }
+    - { type: campaign.paused, severity: critical }
+  tables:
+    # Why cost per acquisition moved, in euro CENTS — the movements on
+    # a €5 lifecycle CAC are tens of cents, and a bridge rounded to
+    # whole euros would show four zeroes and explain nothing. The four
+    # steps are the four things that actually move CAC: what the
+    # auction charged, how the creative performed, what the channel mix
+    # did, and what the landing page converted.
+    - name: cac_bridge
+      columns: [step, amount, kind]
+    # Impression to paying subscriber, in process order.
+    - name: acquisition_funnel
+      columns: [stage, count]
+    # The reallocation table: where the money went and what it returned.
+    - name: spend_by_channel
+      columns: [channel, spend_eur, conversions, cac_eur, roas]
+    # One row per marketing team for the department roll-up.
+    - name: spend_by_unit
+      columns: [unit, spend_eur]
+
+facets:
+  summary:
+    # Measured return on ad spend. Brand teams sit below 1.0 by design
+    # and will read warn — which is the honest signal, because a brand
+    # flight is a bet whose return this report genuinely cannot see.
+    # The instance's own roas target is what says whether that is fine.
+    status: { from: roas, warn_at: 1.0, critical_at: 0.6, direction: below }
+    kpis: [spend_eur, impressions, ctr_pct, cac_eur, roas, conversions]
+    sparkline: spend_rate
+    headline: "{{spend_eur}} EUR spent, {{conversions}} acquired at {{cac_eur}} EUR each"
+  timeline:
+    events: [campaign.launched, campaign.cac_breach, campaign.creative_rejected, campaign.paused]
+    milestones: [campaign.launched]
+  detail:
+    panels:
+      - { title: Spend rate, primitive: timeseries, data: series/spend_rate, section: overview }
+      - { title: Cost per acquisition against target, primitive: kpi_card, data: kpi/cac_eur, section: performance }
+      - { title: What moved CAC (euro cents), primitive: waterfall, data: table/cac_bridge, section: drivers }
+      - { title: Impression to subscriber, primitive: funnel, data: table/acquisition_funnel, section: drivers }
+      - { title: Spend by team, primitive: bar_ranked, data: table/spend_by_unit, section: drivers }
+      - { title: Campaigns needing a decision, primitive: ticker, data: events, section: exceptions }
+      - { title: Channel detail, primitive: datagrid, data: table/spend_by_channel, section: detail }
+    drilldown: [subscriber-growth, brand-reach]
+  pulse:
+    events: [campaign.paused, campaign.cac_breach]
+    rate_limit: 10/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "Why did cost per acquisition move yesterday?"
+      - "Which channels should take budget from which?"
+      - "How much of yesterday's spend was brand rather than performance?"

@@ -1,0 +1,39 @@
+# Standard report categories: the shared filtering/scoping concepts
+# every dashboard, timeline, and pulse view offers. A ReportDefinition
+# declares which it covers. Deployments may extend this set, but a
+# report using a non-standard category is invisible to standard filters
+# — that trade-off is the point of a standard.
+
+version: v1alpha1
+kind: ReportCategorySet
+
+categories:
+  - name: logs
+    description: Raw and structured log output; console buffers, search.
+  - name: performance
+    description: Latency, throughput, resource use, capacity, trends.
+  - name: roadmap
+    description: Planned work, milestones, targets, and schedule drift.
+  - name: delivery
+    description: Shipped work — deploys, releases, completed handoffs.
+  - name: failures
+    description: Errors, incidents, rollbacks, degradations, postmortems.
+  - name: activity
+    description: >
+      Current activity — the pulse. Live signal on what is happening
+      right now, consumable at every scope level.
+  - name: decisions
+    description: >
+      Choices awaiting or already made: escalations, approvals, and work
+      blocked on a human. The question "what needs me?" — distinct from
+      failures, because a decision is not a fault.
+  - name: cost
+    description: >
+      What the work consumed: tokens, compute, spend. Kept out of
+      performance because it has a different owner and sums rather than
+      averages when rolled up.
+  - name: quality
+    description: >
+      Whether the work was right: review outcomes, acceptance, rework.
+      Distinct from delivery (which counts what shipped) and failures
+      (which counts what broke).
