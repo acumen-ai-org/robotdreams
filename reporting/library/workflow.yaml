@@ -1,0 +1,138 @@
+# Report template: workflow — coordinated task execution. A workflow is a
+# named process with ordered steps and a completion criterion; a *run* is
+# one instance of it. This report answers what is running, what is stuck,
+# and where the process leaks.
+#
+# Modelled on a real methodology (goals and capabilities own workflows;
+# workflows own tasks with depends_on; a run carries a log of task
+# transitions and a done_when it is measured against). Copy, rename, and
+# adapt.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: workflow
+description: Workflow runs — steps completed, runs blocked, and time to done_when.
+categories: [activity, delivery, decisions]
+modalities: [glance, narrative, delta, storyboard, board]
+stances: [operational, strategic]
+
+scope:
+  attach: [site, realm, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      runs_started: sum
+      runs_completed: sum
+      runs_active: sum
+      runs_blocked: sum
+      # A duration is a p50 when rolled up, never a sum: adding the time
+      # two teams' runs took produces a number nothing experienced.
+      median_run_minutes: p50
+      step_completion_rate: avg
+    timeline: merge
+    pulse: sample(40)
+    items: sample(30)
+
+data:
+  kpis:
+    - { name: runs_started, unit: count, window: 24h }
+    - { name: runs_completed, unit: count, window: 24h }
+    - { name: runs_active, unit: count }
+    # Blocked is the number this report exists for, so it carries the
+    # target that makes it an answer rather than a number.
+    - { name: runs_blocked, unit: count, target: 0, direction: above }
+    - { name: median_run_minutes, unit: minutes, target: 240, direction: above }
+    - { name: step_completion_rate, unit: percent, target: 95, direction: below }
+  series:
+    - { name: runs_completed_trend, unit: count }
+    - { name: blocked_runs_trend, unit: count }
+  # One event per transition a run's log can record.
+  events:
+    - { type: workflow.created, severity: info }
+    - { type: workflow.started, severity: info }
+    - { type: step.started, severity: info }
+    - { type: step.completed, severity: info }
+    - { type: step.blocked, severity: warn }
+    - { type: workflow.completed, severity: info }
+    - { type: workflow.cancelled, severity: warn }
+  tables:
+    # Stage-and-count rows in process order, for the funnel.
+    - name: step_stages
+      columns: [stage, count]
+    # The only panel anyone acts on.
+    - name: blocked_runs
+      columns: [since, run, step, waiting_on, capability]
+    # The table stays as the searchable record. It used to be the ONLY
+    # form, because depends_on had nowhere to be a graph: the dag
+    # primitive had no data kind behind it, and a panel rendering "no
+    # diagram source" is worse than a table. Items are that data kind, so
+    # the same steps now also draw as the shape they always were.
+    - name: steps
+      columns: [step, status, depends_on, owner, duration]
+    - name: templates
+      columns: [template, runs, median_minutes, completion_rate]
+    - name: runs_by_unit
+      columns: [unit, runs]
+
+facets:
+  summary:
+    status: { from: runs_blocked, warn_at: 1, critical_at: 3, direction: above }
+    kpis: [runs_active, runs_blocked, step_completion_rate]
+    sparkline: runs_completed_trend
+    headline: "{{runs_active}} runs active, {{runs_blocked}} blocked, {{runs_completed}} completed today"
+  timeline:
+    events:
+      [
+        workflow.created,
+        workflow.started,
+        step.started,
+        step.completed,
+        step.blocked,
+        workflow.completed,
+        workflow.cancelled,
+      ]
+    spans:
+      - { name: run, start: workflow.created, end: workflow.completed }
+      - { name: step, start: step.started, end: step.completed }
+    milestones: [workflow.completed]
+  detail:
+    panels:
+      - { title: Runs completed, primitive: timeseries, data: series/runs_completed_trend, section: overview }
+      # Where the process leaks: instantiated, started, past halfway, done.
+      - { title: Step funnel, primitive: funnel, data: table/step_stages, section: drivers }
+      - { title: Runs by unit, primitive: bar_ranked, data: table/runs_by_unit, section: drivers }
+      - { title: Runs blocked on a human, primitive: datagrid, data: table/blocked_runs, section: exceptions }
+      - { title: Run duration, primitive: gantt, data: spans/run, section: detail }
+      - { title: Steps and dependencies, primitive: datagrid, data: table/steps, section: detail }
+      - { title: Template performance, primitive: datagrid, data: table/templates, section: detail }
+      - { title: What runs next, primitive: board, data: items, section: next }
+      - { title: Step dependencies, primitive: dag, data: items, section: next }
+    drilldown: [decisions, activity, delivery]
+  # A workflow's steps were always an item list: a name, a state, an owner,
+  # a duration, and depends_on edges. This declares what they are, which is
+  # also what finally gives the dag primitive something to draw.
+  plan:
+    # The shared flow vocabulary at a run's granularity: a step is
+    # waiting (committed), reached (in_progress), or finished (done). A
+    # stuck step is an in_progress step with blocked_by edges — the edges
+    # say what is stuck, so a column does not have to.
+    states: [committed, in_progress, done]
+    commitments: [committed, planned]
+    levels: [activity, task, subtask]
+    size_unit: minutes
+    baseline: { name: Typical run, ref: kpi/median_run_minutes }
+  pulse:
+    events: [step.blocked, step.completed, workflow.completed]
+    rate_limit: 30/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, events, tables]
+    prompts:
+      - "Which runs are blocked, and on whom?"
+      - "Which template takes longest to reach done_when?"
+      - "Where does the process lose the most runs?"

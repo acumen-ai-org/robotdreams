@@ -1,0 +1,67 @@
+version: 2
+
+updates:
+  # Go module dependencies at the repo root.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    # Conventional Commits, so commitlint and release-please accept the PRs.
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # Mission Control UI is an npm workspace rooted here (internal/dashboard/ui/app
+  # and internal/dashboard/ui/packages/*); one entry for the workspace root
+  # covers the whole tree.
+  - package-ecosystem: "npm"
+    directory: "/internal/dashboard/ui"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    # Conventional Commits, so commitlint and release-please accept the PRs.
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # GitHub Actions workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    # Conventional Commits, so commitlint and release-please accept the PRs.
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"

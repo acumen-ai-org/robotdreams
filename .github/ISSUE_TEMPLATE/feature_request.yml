@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest an idea or improvement for Robot Dreams.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Robot Dreams deliberately keeps a small
+        surface (two primitives plus a control plane) — see `docs/vision/`
+        for the project's scope and non-goals before proposing something
+        that adds a new runtime concept.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the use case or limitation you've run into.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see happen? Sketch the API, config, or behavior if you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or alternative designs you've thought about.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      multiple: true
+      options:
+        - CLI (dream)
+        - Control plane / server
+        - Messaging (embedded/webhook/temporal)
+        - Storage (localfs/s3compat)
+        - Security / identity
+        - Reporting
+        - Scheduling
+        - Mission Control (dashboard UI)
+        - Other / not sure
+    validations:
+      required: false

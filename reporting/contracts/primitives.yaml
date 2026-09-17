@@ -1,0 +1,250 @@
+# Visual primitives: the shared vocabulary of render widgets a facet may
+# hint at. Five families. Each primitive names the data kind it renders
+# (kpi | series | events | spans | table | graph | items) — a consumer
+# may substitute any primitive that renders the same data kind, because
+# the contract is the data, not the widget.
+#
+# Each primitive also names the QUESTION it answers, the way the facets
+# in contracts/facets.yaml do. That is what makes this a vocabulary
+# rather than a widget catalogue: a definition picks the drawing by the
+# question its reader is asking, and a consumer that lacks the widget
+# can substitute another one answering the same question over the same
+# data kind. Enterprise reporting is legible when it uses a small,
+# consistent set of these — see `guidance` at the end of this file.
+
+version: v1alpha1
+kind: PrimitiveVocabulary
+
+families:
+  - name: temporal
+    context: time
+    primitives:
+      - name: gantt
+        data: spans
+        question: "When will work happen?"
+        description: >
+          Multi-track horizontal execution bars with start/end bounds,
+          milestone flags, dependency links, critical-path highlight.
+      - name: burndown
+        data: series
+        question: "Will the remaining work fit the time left?"
+        description: >
+          Work remaining against the ideal line from the plan's
+          baseline. Lives here rather than with the planning family
+          because it renders a SERIES: a plan facet is a snapshot with
+          no item identity between instances, so the curve is something
+          a producer publishes, never something a consumer reconstructs
+          by diffing yesterday's board against today's. Without the
+          ideal line it is a descending line, which cannot be read as
+          good or bad.
+      - name: timeseries
+        data: series
+        question: "How is it changing?"
+        description: >
+          Line, stacked-area, or step plot of metrics over rolling
+          windows (throughput, error counts, latency). Draw the target
+          or the previous period as a reference line: a trend without a
+          reference cannot be read as good or bad.
+      - name: small_multiples
+        data: series
+        question: "How does performance vary across units?"
+        description: >
+          The same small chart repeated once per unit on one shared
+          scale, so squads, regions or services can be compared at a
+          glance instead of by flipping between filtered views.
+      - name: ticker
+        data: events
+        question: "What is happening right now?"
+        description: >
+          Real-time scrolling feed with timestamps, severity tags, and
+          expandable payload drawers.
+
+  - name: topological
+    context: relationships
+    primitives:
+      - name: dag
+        data: graph | items
+        question: "What is the shape of the work?"
+        description: >
+          Node-and-edge flow of step dependencies, branching, parallel
+          paths, live state per node.
+
+          The only primitive naming two data kinds, and the reason is
+          worth stating: `graph` had no producer at all, which is why
+          workflow.yaml carries its apology for rendering depends_on as
+          a table column instead. A plan item's blocked_by edges are
+          that graph. The dependency structure was always the plan's
+          shape; until the plan facet existed there was nothing to draw
+          it from.
+      - name: decomposition_tree
+        data: graph
+        question: "What drives the outcome?"
+        description: >
+          A total broken down level by level along the dimension that
+          explains most of it, each branch carrying its contribution.
+      - name: heatmap
+        data: table
+        question: "Where is attention needed?"
+        description: >
+          Grid where cell area encodes volume and colour encodes metric
+          severity. Colour here means status, never identity.
+      - name: topology
+        data: graph
+        question: "How do the parts connect?"
+        description: >
+          Component map with inter-service edges, call rates, and
+          network health.
+      - name: geomap
+        data: table
+        question: "Where is performance happening?"
+        description: >
+          Values placed on geography. Earns its place only when the
+          geography changes the decision; otherwise a sorted bar chart
+          says the same thing in less space.
+
+  - name: aggregate
+    context: global dashboard
+    primitives:
+      - name: kpi_card
+        data: kpi
+        question: "Are we on target?"
+        description: >
+          Metric value with its target and the variance between them,
+          status badge, delta against the previous period, mini
+          trendline. A value with no target or comparison is a number,
+          not an answer.
+      - name: status_matrix
+        data: table
+        question: "Where is attention needed?"
+        description: >
+          Dense traffic-light grid of component status across
+          environments, nodes, or regions.
+      - name: gauge
+        data: kpi
+        question: "How close is this one value to its limit?"
+        description: >
+          Radial dial or linear bar mapping a value against warning and
+          critical thresholds. One, against a threshold that matters —
+          a wall of gauges says less than a single sorted bar chart.
+      - name: bar_ranked
+        data: table
+        question: "Which areas perform best?"
+        description: >
+          Horizontal bars sorted by value, longest first, labelled in
+          full. The default answer to any "which of these" question:
+          ranking is the comparison, so it is done for the reader
+          rather than left to them.
+      - name: funnel
+        data: table
+        question: "How is a process progressing?"
+        description: >
+          Ordered process stages as narrowing bars, each showing what
+          reached it and what was lost since the stage before. Its
+          table is stage-and-count rows in process order; a consumer
+          sums a stage that several contributors report.
+      - name: waterfall
+        data: table
+        question: "Why did the result change?"
+        description: >
+          A start value, the signed contributions that moved it, and
+          the end value — each step floating from the running total, so
+          the bridge between two periods is the picture. The one chart
+          that answers "why" rather than "what".
+      - name: stacked_bar
+        data: table
+        question: "What is the portfolio composition?"
+        description: >
+          Parts of a whole across a few categories. Bounded: past a
+          handful of segments the reader is decoding a legend, not
+          reading a chart.
+
+  - name: planning
+    context: intended work
+    # Dependencies are NOT a primitive of their own here: an item's
+    # blocked_by edges are a graph, and `dag` above already answers
+    # "what is the shape of the work?" over one. A second dependency
+    # widget would be variety, not a question. Burndown is not here
+    # either — it renders a series, so it sits with the temporal family.
+    primitives:
+      - name: board
+        data: items
+        question: "What are we going to do?"
+        description: >
+          Items in columns, columns in the plan's own declared flow
+          order, left to right. The order is the argument: a board whose
+          columns are alphabetical says nothing about progress. Bound
+          the cards per column — a column nobody can read the bottom of
+          is a backlog, not a plan — and bound them worst-first, so what
+          survives the bound is what needs acting on.
+      - name: roadmap_lanes
+        data: items
+        question: "What lands when, and in which track?"
+        description: >
+          Items placed in horizon buckets across parallel lanes. What a
+          portfolio review needs and a gantt cannot give: dated bars
+          claim a precision that work three quarters out does not have.
+          Draw commitment as weight, not colour — colour is already
+          spoken for by status.
+      - name: checklist
+        data: items
+        question: "What is left before this is done?"
+        description: >
+          A flat ordered list of items and their state, for the small
+          bounded plan a board would over-dress: a release checklist, a
+          runbook, the four things left in a migration. Most plans are
+          this, and the board is the exception.
+
+  - name: diagnostic
+    context: drill-down
+    primitives:
+      - name: flamegraph
+        data: spans
+        question: "Where is the time going?"
+        description: >
+          Stacked horizontal bars of execution depth pinpointing latency
+          bottlenecks in call paths.
+      - name: scatter
+        data: table
+        question: "What drives the outcome?"
+        description: >
+          Two measures per unit, one point each, for the relationship
+          between them — cost against throughput, wait against volume.
+      - name: datagrid
+        data: table
+        question: "What are the precise numbers?"
+        description: >
+          Multi-axis table with sorting, faceted filtering, grouping,
+          expandable nested rows. Carries sparklines and variance
+          columns where the row has history: the table is where exact
+          values live, and it should not force a trip to a chart.
+      - name: logbuffer
+        data: events
+        question: "What did it actually say?"
+        description: >
+          Fixed-width live-tailing text window with level filters,
+          highlighting, inline regex search.
+      - name: diff
+        data: table
+        question: "What changed between these two?"
+        description: >
+          Dual-pane comparison highlighting deltas between two
+          executions, expected vs. actual, baseline vs. current.
+
+# How the vocabulary is meant to be used. Not validated — a definition
+# cannot be rejected for being ugly — but this is the house style, and
+# a consumer implementing these primitives should implement them this
+# way.
+guidance:
+  core_set: >
+    Most reports are well served by six: kpi_card, timeseries,
+    bar_ranked, waterfall, heatmap and datagrid. Reach past them when a
+    question in this file genuinely calls for it, not for variety.
+  colour: >
+    Colour means status or selection. It is not decoration and not
+    identity: a rainbow of series colours makes a chart look busy and
+    read as though every series mattered equally.
+  avoid: >
+    Gauge clusters, pie charts past two or three slices, decorative 3D,
+    and dashboards of twenty equally prominent widgets. Equal
+    prominence is a claim that nothing matters more than anything else,
+    which is never true of a report someone opened for a reason.

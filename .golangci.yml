@@ -1,0 +1,105 @@
+# golangci-lint v2 configuration (https://golangci-lint.run/docs/configuration/file/).
+# CI runs it via golangci/golangci-lint-action (.github/workflows/ci.yml);
+# locally: `make lint-go`, and `make fmt` applies the formatters section.
+version: "2"
+
+run:
+  timeout: 5m
+  # Lint the build-tagged integration tests too, so they do not rot.
+  build-tags:
+    - integration
+
+linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - gosec
+    - misspell
+    - nolintlint
+    - revive
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+    gosec:
+      excludes:
+        # G104 (unhandled errors) duplicates errcheck.
+        - G104
+        # G204/G304: this is a CLI that runs operator-configured commands
+        # and reads operator-supplied paths by design; the findings are
+        # the feature, not a bug.
+        - G204
+        - G304
+    govet:
+      enable:
+        - nilness
+    misspell:
+      # No locale: the prose here is consistently British ("behaviour",
+      # "modelling"); a locale would flag one dialect or the other. The
+      # neutral setting reports only genuine misspellings.
+      ignore-rules: []
+    revive:
+      # The default rule set, minus the ones that fight this codebase's
+      # conventions (exported identifiers documented at the type/package
+      # level rather than one comment per method).
+      enable-default-rules: true
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        # http.Handler-shaped and interface-satisfying methods legitimately
+        # ignore parameters; the signal is too low here.
+        - name: unused-parameter
+          disabled: true
+    staticcheck:
+      checks:
+        - all
+        # ST1000/ST1003/ST1016/ST1020-22 are the documentation and naming
+        # conventions golangci-lint disables by default; keep that.
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+  exclusions:
+    generated: lax
+    presets:
+      - std-error-handling
+      - common-false-positives
+    paths:
+      # An npm dependency (flatted) ships a Go package; it is not our code.
+      - internal/dashboard/ui/node_modules
+    rules:
+      # Tests and the integration harness may build paths, shell out and
+      # run servers without production hardening.
+      - path: (_test\.go|^test/)
+        linters:
+          - gosec
+      # The simulation fabricates plausible-looking data; math/rand is the
+      # right tool there (G404: weak random number generator).
+      - path: ^internal/simulation/
+        linters:
+          - gosec
+        text: G404
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/acumen-ai-org/robotdreams
+    gofumpt:
+      module-path: github.com/acumen-ai-org/robotdreams
+  exclusions:
+    paths:
+      - internal/dashboard/ui/node_modules
+
+issues:
+  # Report everything; CI should not hide the tail of the list.
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -1,0 +1,102 @@
+# Report template: legal-matters — counsel throughput. A legal team's
+# week is measured the way any queue is: what came in, what went out,
+# and how long the middle took. Categorised as delivery (a signed
+# contract is shipped work) and decisions, because the matters counsel
+# cannot move are almost always waiting on a business owner rather than
+# on a lawyer.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: legal-matters
+description: Contracts in flight, matter throughput, and turnaround.
+categories: [delivery, decisions]
+modalities: [glance, delta]
+stances: [operational, diagnostic]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Turnaround is a median, and the median of a set of medians is
+    # not the median of the set — but p50 over the contributing
+    # instances is the closest the vocabulary gets, and it is honest
+    # about being a percentile rather than pretending to be a mean.
+    kpis:
+      contracts_in_flight: sum
+      matters_open: sum
+      matters_closed: sum
+      outside_counsel_eur: sum
+      median_turnaround_days: p50
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: contracts_in_flight, unit: count, window: 7d }
+    # Standard paper — NDAs, order forms, vendor MSAs on our template
+    # — turns around in a working week. Bespoke negotiation does not,
+    # and is not what this median is for.
+    - { name: median_turnaround_days, unit: days, window: 30d, target: 7, direction: above }
+    - { name: matters_open, unit: count, window: 7d }
+    - { name: matters_closed, unit: count, window: 7d }
+    - { name: outside_counsel_eur, unit: count, window: 7d }
+  series:
+    - { name: turnaround_trend, unit: days }
+    - { name: in_flight_trend, unit: count }
+  events:
+    - { type: matter.opened, severity: info }
+    - { type: matter.closed, severity: info }
+    - { type: contract.signed, severity: info }
+    - { type: escalation.raised, severity: warn }
+    - { type: deadline.missed, severity: critical }
+  tables:
+    # Intake to signature, so the stage where paper actually sits is
+    # visible rather than inferred from a turnaround average.
+    - name: matter_stages
+      columns: [stage, count]
+    - name: matters_by_type
+      columns: [type, open, closed, median_days]
+    # The matters counsel has finished with and the business has not.
+    # This is the section a general counsel forwards to someone else.
+    - name: awaiting_business_decision
+      columns: [since, matter, counterparty, question, owner]
+    - name: open_matters
+      columns: [opened, type, matter, counterparty, owner, days_open]
+    - name: matters_by_unit
+      columns: [unit, matters_open]
+
+facets:
+  summary:
+    status: { from: median_turnaround_days, warn_at: 10, critical_at: 15, direction: above }
+    kpis: [matters_open, contracts_in_flight, median_turnaround_days, outside_counsel_eur]
+    sparkline: turnaround_trend
+    headline: "{{matters_open}} matters open, {{contracts_in_flight}} contracts in flight, {{median_turnaround_days}}d median turnaround"
+  timeline:
+    events: [matter.opened, matter.closed, contract.signed, escalation.raised, deadline.missed]
+    spans:
+      - { name: matter, start: matter.opened, end: matter.closed }
+    milestones: [contract.signed, deadline.missed]
+  detail:
+    panels:
+      - { title: Turnaround over time, primitive: timeseries, data: series/turnaround_trend, section: overview }
+      - { title: Turnaround against SLA, primitive: kpi_card, data: kpi/median_turnaround_days, section: performance }
+      - { title: Where matters sit, primitive: funnel, data: table/matter_stages, section: drivers }
+      - { title: Matters by type, primitive: bar_ranked, data: table/matters_by_type, section: drivers }
+      - { title: Open matters by unit, primitive: bar_ranked, data: table/matters_by_unit, section: drivers }
+      - { title: Waiting on a business decision, primitive: datagrid, data: table/awaiting_business_decision, section: exceptions }
+      - { title: Open matters, primitive: datagrid, data: table/open_matters, section: detail }
+    drilldown: [compliance, decisions, activity]
+  pulse:
+    events: [escalation.raised, deadline.missed]
+    rate_limit: 10/min
+  media:
+    archetypes: [anchor]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "Which matters are blocked on a business decision?"
+      - "Where is outside counsel spend going?"

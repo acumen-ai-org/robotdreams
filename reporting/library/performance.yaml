@@ -1,0 +1,76 @@
+# Report template: performance — latency, throughput, capacity.
+# Copy, rename, and adapt.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: performance
+description: Latency, throughput, and capacity against thresholds.
+categories: [performance]
+modalities: [glance, delta, narrative]
+stances: [operational]
+
+scope:
+  attach: [site]
+  aggregation:
+    status: worst
+    headline: latest
+    kpis:
+      p95_latency_ms: p95
+      throughput_per_min: sum
+      error_rate_pct: avg
+      capacity_used_pct: max
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    # Targets are the team's own latency budget and error budget, so
+    # the definition carries only a default; the instance overrides it
+    # per scope. direction says which side of the target is the bad one.
+    - { name: p95_latency_ms, unit: ms, window: 1h, target: 300, direction: above }
+    - { name: throughput_per_min, unit: per-minute, window: 1h }
+    - { name: error_rate_pct, unit: percent, window: 1h, target: 1, direction: above }
+    - { name: capacity_used_pct, unit: percent, target: 75, direction: above }
+  series:
+    - { name: latency, unit: ms }
+    - { name: throughput, unit: per-minute }
+  tables:
+    # One row per team, so a realm ranks the teams beneath it without
+    # any aggregation rule beyond the row concatenation the API already
+    # does. "Which of these is slowest" is the question a lead asks.
+    - name: latency_by_unit
+      columns: [unit, p95_latency_ms]
+  events:
+    - { type: perf.degraded, severity: warn }
+    - { type: perf.recovered, severity: info }
+
+facets:
+  summary:
+    status: { from: p95_latency_ms, warn_at: 500, critical_at: 2000, direction: above }
+    kpis: [p95_latency_ms, throughput_per_min, capacity_used_pct]
+    sparkline: latency
+    headline: "p95 {{p95_latency_ms}}ms at {{throughput_per_min}}/min"
+  timeline:
+    events: [perf.degraded, perf.recovered]
+    spans:
+      - { name: degradation, start: perf.degraded, end: perf.recovered }
+  detail:
+    # Sections put the page in reading order: what happened, how it
+    # compares, why, what needs a decision, then the numbers.
+    panels:
+      - { title: Latency, primitive: timeseries, data: series/latency, section: overview }
+      - { title: Throughput, primitive: timeseries, data: series/throughput, section: overview }
+      - { title: Capacity against limit, primitive: gauge, data: kpi/capacity_used_pct, section: performance }
+      - { title: Slowest units, primitive: bar_ranked, data: table/latency_by_unit, section: drivers }
+      - { title: Degradations, primitive: ticker, data: events, section: exceptions }
+    drilldown: [logs]
+  pulse:
+    events: [perf.degraded, perf.recovered]
+    rate_limit: 10/min
+  conversation:
+    grounding: [kpis, series]
+    prompts:
+      - "Where are today's main bottlenecks?"

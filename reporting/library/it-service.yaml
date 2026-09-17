@@ -1,0 +1,100 @@
+# Report template: it-service — corporate IT. The internal service
+# desk and the systems behind it, reported the way any service is:
+# volume, time to restore, and whether the estate is in the state it is
+# supposed to be in. Categorised as activity and performance rather
+# than delivery: corporate IT does not ship releases, it keeps seven
+# thousand people working.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: it-service
+description: Internal tickets, restore times, device compliance, and seats.
+categories: [activity, performance]
+modalities: [glance, delta]
+stances: [operational, diagnostic]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      tickets: sum
+      seats_licensed: sum
+      seats_used: sum
+      mttr_hours: avg
+      device_compliance_pct: avg
+      internal_uptime_pct: avg
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: tickets, unit: count, window: 24h }
+    # A working day to restore an internal service. Longer than a
+    # production SLO on purpose: nobody pages at 03:00 for a docking
+    # station, and pretending otherwise makes the number a fiction.
+    - { name: mttr_hours, unit: hours, window: 24h, target: 8, direction: above }
+    # Patch and configuration compliance across the managed fleet. The
+    # security team reads this number too, which is why 95 is a floor
+    # rather than an aspiration.
+    - { name: device_compliance_pct, unit: percent, window: 24h, target: 95, direction: below }
+    - { name: seats_licensed, unit: count, window: 24h }
+    - { name: seats_used, unit: count, window: 24h }
+    - { name: internal_uptime_pct, unit: percent, window: 30d, target: 99.5, direction: below }
+  series:
+    - { name: ticket_rate, unit: per-hour }
+    - { name: uptime_trend, unit: percent }
+  events:
+    - { type: ticket.raised, severity: info }
+    - { type: service.restored, severity: info }
+    - { type: service.degraded, severity: warn }
+    - { type: patch.overdue, severity: warn }
+    - { type: licence.exhausted, severity: critical }
+  tables:
+    - name: tickets_by_service
+      columns: [service, tickets, mttr_hours]
+    # The gap between what is paid for and what is used, per
+    # application. Unused seats are the one line in a corporate IT
+    # budget that can be cancelled the same afternoon, which is why
+    # this and not a ticket count is the panel that needs attention.
+    - name: licence_gap
+      columns: [application, licensed, used, idle_90d, annual_eur]
+    - name: service_health
+      columns: [service, uptime_pct, incidents, compliance_pct]
+    - name: tickets_by_unit
+      columns: [unit, tickets]
+
+facets:
+  summary:
+    status: { from: device_compliance_pct, warn_at: 95, critical_at: 90, direction: below }
+    kpis: [tickets, mttr_hours, device_compliance_pct, internal_uptime_pct]
+    sparkline: ticket_rate
+    headline: "{{tickets}} tickets at {{mttr_hours}}h MTTR, {{seats_used}} of {{seats_licensed}} seats in use"
+  timeline:
+    events: [ticket.raised, service.degraded, service.restored, patch.overdue, licence.exhausted]
+    spans:
+      - { name: degradation, start: service.degraded, end: service.restored }
+    milestones: [licence.exhausted]
+  detail:
+    panels:
+      - { title: Tickets per hour, primitive: timeseries, data: series/ticket_rate, section: overview }
+      - { title: Device compliance against floor, primitive: kpi_card, data: kpi/device_compliance_pct, section: performance }
+      - { title: Tickets by internal service, primitive: bar_ranked, data: table/tickets_by_service, section: drivers }
+      - { title: Tickets by unit, primitive: bar_ranked, data: table/tickets_by_unit, section: drivers }
+      - { title: Licensed seats nobody is using, primitive: datagrid, data: table/licence_gap, section: exceptions }
+      - { title: Internal service health, primitive: datagrid, data: table/service_health, section: detail }
+    drilldown: [security-posture, activity, cost]
+  pulse:
+    events: [service.degraded, licence.exhausted]
+    rate_limit: 20/min
+  media:
+    archetypes: [anchor]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "Which applications are we over-licensed on?"
+      - "What is driving helpdesk volume this week?"

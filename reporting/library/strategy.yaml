@@ -1,0 +1,98 @@
+# Report template: strategy — the objectives a division is trying to reach,
+# and how far up them it has got.
+#
+# Not a portfolio and not a roadmap, and the three are easy to conflate:
+#   roadmap    when will the work land
+#   portfolio  which work is funded, and what it should return
+#   strategy   what the funding is FOR — the end state the bets serve
+#
+# Categorised roadmap AND decisions, because an objective nobody is
+# willing to stop pursuing is not a strategy, it is a wish.
+#
+# Levels are goal and initiative only: a strategy publishes ends, and the
+# work that serves them lives in the reports below it.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: strategy
+description: Objectives and key results — the end state, and how far up it we are.
+categories: [roadmap, decisions]
+modalities: [board, narrative, delta]
+stances: [strategic]
+
+scope:
+  attach: [world, universe]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Objectives and results count and so sum; attainment and confidence
+    # are ratios and average.
+    kpis:
+      objectives_active: sum
+      key_results_on_track: sum
+      key_results_off_track: sum
+      attainment_pct: avg
+    timeline: merge
+    pulse: sample(5)
+    # At the top of a company a board of cards is not a view. The columns
+    # and their totals are.
+    items: top(15)
+
+data:
+  kpis:
+    - { name: objectives_active, unit: count }
+    - { name: key_results_on_track, unit: count }
+    - { name: key_results_off_track, unit: count, target: 2, direction: above }
+    # The OKR convention: 0.7 is a hit, and scoring 1.0 means the
+    # objectives were set too low. Lower is worse.
+    - { name: attainment_pct, unit: percent, window: 90d, target: 70, direction: below }
+  series:
+    - { name: attainment_trend, unit: percent }
+  events:
+    - { type: objective.set, severity: info }
+    - { type: objective.met, severity: info }
+    - { type: objective.dropped, severity: warn }
+    - { type: key_result.off_track, severity: warn }
+  tables:
+    - name: objectives
+      columns: [objective, owner, horizon, attainment_pct, confidence]
+    - name: off_track
+      columns: [key_result, objective, owner, gap, ask]
+
+facets:
+  summary:
+    status: { from: attainment_pct, warn_at: 65, critical_at: 50, direction: below }
+    kpis: [objectives_active, key_results_off_track, attainment_pct]
+    sparkline: attainment_trend
+    headline: "{{objectives_active}} objectives, {{attainment_pct}}% attainment, {{key_results_off_track}} off track"
+  plan:
+    # The shared flow vocabulary; "done" here means the objective is met.
+    states: [proposed, committed, in_progress, done]
+    horizons: [this_quarter, next_quarter, this_year, next_year]
+    commitments: [committed, planned, candidate]
+    levels: [goal, initiative]
+    baseline: { name: Attainment target, ref: kpi/attainment_pct }
+  timeline:
+    events: [objective.set, objective.met, objective.dropped, key_result.off_track]
+    milestones: [objective.met, objective.dropped]
+  detail:
+    panels:
+      - { title: Attainment, primitive: timeseries, data: series/attainment_trend, section: overview }
+      - { title: Attainment against target, primitive: kpi_card, data: kpi/attainment_pct, section: performance }
+      - { title: Off track, primitive: datagrid, data: table/off_track, section: exceptions, stance: strategic }
+      - { title: The objectives, primitive: roadmap_lanes, data: items, section: next }
+      - { title: Objectives in full, primitive: datagrid, data: table/objectives, section: detail }
+    drilldown: [portfolio, plan]
+  pulse:
+    events: [objective.met, objective.dropped, key_result.off_track]
+    rate_limit: 5/min
+  media:
+    archetypes: [anchor, podcast]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "Which objectives are off track, and what is the ask?"
+      - "What did we drop this quarter, and why?"

@@ -1,0 +1,50 @@
+# Build artifacts
+/bin/
+/dist/
+/dream
+
+# Mission Control build output (Vite, from internal/dashboard/ui) is built
+# into internal/dashboard/web/dist/, not committed; the binary embeds it
+# when present and the committed web/placeholder/ page otherwise (see
+# internal/dashboard/embed.go).
+internal/dashboard/web/dist/
+
+# Dashboard UI toolchain
+internal/dashboard/ui/node_modules/
+internal/dashboard/ui/**/node_modules/
+internal/dashboard/ui/packages/*/dist/
+internal/dashboard/ui/packages/*/smoke-dist/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Data / runtime state
+*.db
+*.sqlite
+*.sqlite3
+.dream/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env
+.env
+.env.local
+
+# Browser-automation artifacts from local verification runs.
+.playwright-mcp/
+
+*:Zone.Identifier
+
+# npm pack output from a local library dry-run.
+internal/dashboard/ui/*.tgz

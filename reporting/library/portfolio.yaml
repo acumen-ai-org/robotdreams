@@ -1,0 +1,119 @@
+# Report definition: portfolio — what a division is betting on. Not a
+# roadmap: a roadmap says when work will land, a portfolio says which
+# work is funded at all and what it is expected to return. Categorised
+# roadmap AND decisions, because half of what a portfolio review
+# produces is a decision to stop something.
+#
+# Attaches at realm and world. Corporate development sits at a site and
+# produces one too — a strategy team's whole job is the portfolio — so
+# the definition is written to mean the same thing at either altitude.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: portfolio
+description: Funded initiatives, OKR attainment, and the bets that are at risk.
+categories: [roadmap, decisions]
+modalities: [narrative, delta, spatial, board]
+stances: [strategic]
+
+scope:
+  attach: [realm, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Counts of initiatives sum; money sums; attainment is a ratio and
+    # averages. at_risk sums rather than taking a max because the
+    # question a VP asks is "how many of my bets are in trouble", and
+    # that is an addition.
+    kpis:
+      initiatives_active: sum
+      okr_attainment_pct: avg
+      initiatives_at_risk: sum
+      investment_eur: sum
+    timeline: merge
+    pulse: sample(10)
+    # A VP reads the twenty that matter, not four hundred initiatives.
+    items: top(20)
+
+data:
+  kpis:
+    - { name: initiatives_active, unit: count }
+    # The OKR convention: 0.7 is a hit, and a portfolio scoring 1.0 set
+    # its objectives too low. Lower is worse, so direction is below.
+    - { name: okr_attainment_pct, unit: percent, window: 90d, target: 70, direction: below }
+    - { name: initiatives_at_risk, unit: count }
+    - { name: investment_eur, unit: eur, window: 90d }
+  series:
+    - { name: okr_trend, unit: percent }
+  events:
+    - { type: initiative.started, severity: info }
+    - { type: initiative.delivered, severity: info }
+    - { type: investment.reallocated, severity: info }
+    - { type: initiative.at_risk, severity: warn }
+    - { type: initiative.stopped, severity: warn }
+  tables:
+    # Committed -> started -> on track -> delivered. The gap between
+    # committed and started is the portfolio's real capacity problem,
+    # and it is invisible in any per-initiative view.
+    - name: portfolio_stages
+      columns: [stage, count]
+    # The section a portfolio review is actually for: the bets in
+    # trouble, each with the ask that would unblock it.
+    - name: at_risk
+      columns: [initiative, owner, risk, days_at_risk, ask]
+    - name: initiatives
+      columns: [initiative, owner, stage, confidence, investment_eur]
+    - name: investment_by_unit
+      columns: [unit, investment_eur]
+
+facets:
+  summary:
+    # Below 65% the quarter is off; below 50% the objectives were wrong
+    # or the funding was.
+    status: { from: okr_attainment_pct, warn_at: 65, critical_at: 50, direction: below }
+    kpis: [initiatives_active, okr_attainment_pct, initiatives_at_risk, investment_eur]
+    sparkline: okr_trend
+    headline: "{{initiatives_active}} initiatives, {{okr_attainment_pct}}% OKR attainment, {{initiatives_at_risk}} at risk"
+  timeline:
+    events: [initiative.started, initiative.delivered, investment.reallocated, initiative.at_risk, initiative.stopped]
+    spans:
+      - { name: initiative, start: initiative.started, end: initiative.delivered }
+    milestones: [initiative.delivered, initiative.stopped]
+  detail:
+    panels:
+      - { title: OKR attainment, primitive: timeseries, data: series/okr_trend, section: overview }
+      - { title: Attainment against target, primitive: kpi_card, data: kpi/okr_attainment_pct, section: performance }
+      - { title: Initiative stages, primitive: funnel, data: table/portfolio_stages, section: drivers }
+      - { title: Investment by unit, primitive: bar_ranked, data: table/investment_by_unit, section: drivers }
+      - { title: Bets at risk, primitive: datagrid, data: table/at_risk, section: exceptions, stance: strategic }
+      - { title: The portfolio, primitive: datagrid, data: table/initiatives, section: detail }
+      - { title: Where the bets sit, primitive: board, data: items, section: next }
+    drilldown: [roadmap, budget-variance, decisions]
+  # The stages in `portfolio_stages` are a flow, and the funnel drawn from
+  # them was already a board seen end-on. Levels are goal and initiative
+  # rather than task: a portfolio publishes bets, not work.
+  plan:
+    # The shared flow vocabulary. A stopped bet is not a late column —
+    # it has left the plan, which is what stopping one means, and
+    # initiative.stopped says so on the timeline. Keeping it out is what
+    # makes `done` terminal.
+    states: [committed, in_progress, done]
+    horizons: [this_quarter, next_quarter, h2, next_year]
+    commitments: [funded, provisional, unfunded]
+    levels: [goal, initiative]
+    size_unit: eur
+    baseline: { name: OKR target, ref: kpi/okr_attainment_pct }
+  pulse:
+    events: [initiative.at_risk, initiative.stopped, initiative.delivered]
+    rate_limit: 5/min
+  media:
+    archetypes: [anchor, podcast]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "Which bets are at risk and what is the ask?"
+      - "Where is the investment concentrated?"
+      - "What have we stopped this quarter?"

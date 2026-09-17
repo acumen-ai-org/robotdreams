@@ -1,0 +1,113 @@
+# Report definition: security-posture — open findings, how fast they
+# are closed, and what the detection side triaged. Daily, because a
+# vulnerability management review is a daily standing meeting and the
+# age of a finding changes every night.
+#
+# Two teams produce it and they read it differently. Application
+# security lives in the findings-and-patching half: what is open, how
+# old, is it patched. Threat detection lives in the detections half:
+# what fired, what was real, what was noise. The definition carries
+# both halves so one page answers "are we exposed?" and "did anyone try
+# anything?" without inventing a second report.
+#
+# Patch SLAs are the common 30/60/90 days by severity — critical in 30,
+# high in 60, medium in 90 — which is what makes the severity-by-age
+# heatmap the whole review: every cell to the right of a severity's
+# deadline is a breach.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: security-posture
+description: Open findings by age and severity, patch coverage, and detection triage.
+categories: [failures, quality]
+modalities: [glance, delta, narrative]
+stances: [operational, diagnostic]
+
+scope:
+  attach: [site, realm, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      findings_open: sum
+      findings_sla_breached: sum
+      detections_triaged: sum
+      # Time-to-remediate and the two rates average. A mean MTTR across
+      # teams is weak but honest; summing days would be nonsense.
+      mttr_days: avg
+      patch_coverage_pct: avg
+      false_positive_pct: avg
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: findings_open, unit: count }
+    # The one number the programme commits to: nothing sits past its
+    # severity's patch deadline. Not aspirational — a breached SLA is
+    # an accepted risk that nobody accepted.
+    - { name: findings_sla_breached, unit: count, target: 0, direction: above }
+    - { name: mttr_days, unit: days }
+    # Fleet-wide patch level. 95% is the working bar; the last few
+    # percent is always something that cannot be restarted.
+    - { name: patch_coverage_pct, unit: percent, target: 95, direction: below }
+    - { name: detections_triaged, unit: count, window: 24h }
+    # No target: a detection estate tuned to zero false positives is
+    # tuned to miss things.
+    - { name: false_positive_pct, unit: percent }
+  series:
+    - { name: findings_trend, unit: count }
+  events:
+    - { type: finding.opened, severity: warn }
+    - { type: finding.closed, severity: info }
+    - { type: sla.breached, severity: critical }
+    - { type: detection.escalated, severity: warn }
+    - { type: detection.dismissed, severity: info }
+  tables:
+    # Severity down the side, age bucket across the top, count in the
+    # cell: precisely the grid a vulnerability review reads, and
+    # precisely the "where is attention needed?" question. Colour here
+    # is severity-of-status, never identity.
+    - name: findings_heat
+      columns: [row, column, value]
+    - name: open_findings
+      columns: [severity, component, age_days, owner, due]
+    - name: detection_sources
+      columns: [source, detections]
+    - name: findings_by_unit
+      columns: [unit, findings_open]
+
+facets:
+  summary:
+    status: { from: findings_sla_breached, warn_at: 1, critical_at: 3, direction: above }
+    kpis: [findings_open, findings_sla_breached, mttr_days, patch_coverage_pct]
+    sparkline: findings_trend
+    headline: "{{findings_open}} findings open, {{findings_sla_breached}} past SLA, {{detections_triaged}} detections triaged"
+  timeline:
+    events: [finding.opened, finding.closed, sla.breached, detection.escalated, detection.dismissed]
+    # A finding is the period between discovery and the patch landing,
+    # and that period is the metric.
+    spans:
+      - { name: finding, start: finding.opened, end: finding.closed }
+    milestones: [sla.breached]
+  detail:
+    panels:
+      - { title: Open findings, primitive: timeseries, data: series/findings_trend, section: overview }
+      - { title: Severity against age, primitive: heatmap, data: table/findings_heat, section: drivers }
+      - { title: Detections by source, primitive: bar_ranked, data: table/detection_sources, section: drivers }
+      - { title: Findings by unit, primitive: bar_ranked, data: table/findings_by_unit, section: drivers }
+      - { title: Past its patch SLA, primitive: datagrid, data: table/open_findings, section: exceptions }
+    drilldown: [incident, compliance]
+  pulse:
+    events: [sla.breached, detection.escalated]
+    rate_limit: 20/min
+  media:
+    archetypes: [anchor]
+  conversation:
+    grounding: [kpis, series, events, tables]
+    prompts:
+      - "Which critical findings are past their 30-day patch deadline?"
+      - "How much of yesterday's detection volume was noise?"

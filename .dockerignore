@@ -1,0 +1,9 @@
+.git
+.github
+bin
+internal/dashboard/ui/node_modules
+internal/dashboard/ui/**/node_modules
+internal/dashboard/ui/packages/*/dist
+*.zip
+*.zip:Zone.Identifier
+internal/dashboard/web/dist/

@@ -1,0 +1,30 @@
+# release-please keeps a release pull request open against main. Every
+# Conventional Commit merged to main updates that PR's CHANGELOG entry
+# and proposed version (feat → minor, fix → patch, "!"/BREAKING CHANGE →
+# minor while pre-1.0). Merging the PR tags the release; release.yml then
+# builds it — automatically only if RELEASE_PLEASE_TOKEN (a PAT) is set,
+# since tags pushed with GITHUB_TOKEN start no workflows. Without the
+# PAT, run release.yml by hand with the tag.
+name: release-please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the tag and the GitHub Release
+      pull-requests: write # open and update the release PR
+    steps:
+      - name: release-please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

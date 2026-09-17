@@ -1,0 +1,97 @@
+# Stances: the footing a report is read from — what its numbers are
+# measured against.
+#
+# The contract already had four axes: subject (categories), shape
+# (facets), delivery (modalities) and drawing (primitives). None of them
+# answers a question every reader brings to a report before they look at
+# it: am I keeping this running, am I steering it, or am I finding out
+# what happened? The same delivery report is three different readings
+# depending on which of those is true, and the difference is not what it
+# is about or how it is drawn — it is what the number is compared to.
+#
+# A definition declares which stances it can serve; a reader picks one.
+# That is the same grammar as modalities.yaml — "the report doesn't get a
+# vote about where it is read" — applied to how it is judged rather than
+# where it is shown.
+#
+# A definition declaring no stance is readable in every stance. That is a
+# real answer and not a hole: a raw activity feed genuinely does not care
+# which footing you read it from.
+
+version: v1alpha1
+kind: StanceVocabulary
+
+stances:
+  - name: operational
+    question: "Is it running?"
+    measured_against: a threshold, an SLA, or a steady state
+    description: >
+      The capability reading. The reader is keeping a system alive and
+      acts from inside it: status, throughput, saturation, queue depth,
+      and the exceptions that need somebody now.
+    # Which panel sections serve this stance. The reading order in
+    # facets.yaml was already a stance projection; this names it.
+    sections: [overview, exceptions, drivers]
+    primitives: [status_matrix, gauge, timeseries, heatmap, ticker, topology, small_multiples, checklist]
+    modalities: [glance, spatial]
+    facets: [summary, pulse, timeline]
+
+  - name: strategic
+    question: "Are we getting where we said we would?"
+    measured_against: a plan, a target, an intended end state
+    description: >
+      The goal reading. The reader is steering and acts on the system:
+      actual against plan, the movement attributed to what caused it,
+      attainment, and the bets that are at risk.
+
+      This stance was defined as "measured against a plan" for a while
+      before anything modelled a plan, so the comparison it names was
+      answered by a scalar target and nothing else. The `plan` facet is
+      that plan, and `next` is where it sits on the page.
+    sections: [overview, performance, drivers, next]
+    primitives: [kpi_card, waterfall, funnel, gantt, bar_ranked, decomposition_tree, stacked_bar, board, roadmap_lanes, burndown]
+    modalities: [delta, narrative, board]
+    facets: [summary, detail, media, plan]
+
+  - name: diagnostic
+    question: "What actually happened, exactly?"
+    measured_against: nothing — the record is the answer
+    description: >
+      The evidence reading. No verdict is being asked for yet; the reader
+      wants the unaggregated record, in enough detail to form one.
+    sections: [overview, detail]
+    primitives: [datagrid, logbuffer, flamegraph, diff, scatter, timeseries]
+    modalities: [storyboard, conversational]
+    facets: [timeline, detail, conversation]
+
+# House style, like primitives.yaml's guidance block. Not validated — a
+# definition cannot be rejected for choosing badly — but this is how the
+# axis is meant to be used.
+guidance:
+  three_and_only_three: >
+    Two of these are the strategic/operational split every methodology
+    ends up naming. The third earns its place from the data: `logs` and
+    `activity` are the only definitions in the library with no target on
+    any KPI, because a log has no steady state to hold and no end state
+    to reach. Without a diagnostic stance they would have to claim one.
+  not_a_fourth: >
+    Assurance and compliance are not a fourth stance. Auditability is a
+    property of every report — as a filter value it produces nonsense
+    ("is this delivery report auditable?" — it had better be) — and the
+    subject half is already the `compliance` definition. "Decision" is
+    not one either: it collides with the `decisions` category and with
+    the `exceptions` section, and an axis whose value duplicates a
+    section name is not an axis.
+  one_at_a_time: >
+    A stance is a footing, not a set. Reading strategically OR
+    diagnostically produces a page that argues neither, so the filter is
+    single-select with an explicit "any".
+  reorder_never_hide: >
+    Choosing a stance re-weights a report; it does not empty one. A
+    reader who switches stance onto a blank page concludes the report is
+    broken, not that they asked the wrong question.
+  still_missing: >
+    Stance says what decision the reader is about to make. It does not
+    say WHO is asking. That half is still open — see the reader lens in
+    the categories documentation, now a six-part tuple: categories x
+    facet x modality x stance x scope level x cadence.

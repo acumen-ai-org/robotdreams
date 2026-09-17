@@ -1,0 +1,111 @@
+# Report definition: financial-close — the month-end close, as the
+# controller runs it. Deliberately categorised as delivery AND roadmap:
+# a close is a piece of shipped work with a hard calendar on it, and the
+# only question anybody asks about it is "which day are we on and what
+# is still open".
+#
+# Attaches at site only. A close belongs to the ledger-owning team that
+# performs it; a department "close" is the slowest of its teams, which
+# is exactly what the max policies below say.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: financial-close
+description: Month-end close progress, open items, and days to close.
+categories: [delivery, roadmap]
+modalities: [narrative, delta]
+stances: [operational, strategic]
+
+scope:
+  attach: [site]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Two counts sum and three do not. The group is on the close day of
+    # whichever team is furthest behind, and it has not closed until the
+    # last ledger closes — so both of those take max, not sum. Percent
+    # complete averages: adding two percentages produces 190% complete.
+    kpis:
+      close_day: max
+      tasks_complete_pct: avg
+      unreconciled_accounts: sum
+      adjusting_entries: sum
+      days_to_close: max
+    timeline: merge
+    pulse: sample(10)
+
+data:
+  kpis:
+    # The business day of the close the team is on — the first thing a
+    # controller says out loud in a close stand-up.
+    - { name: close_day, unit: days }
+    - { name: tasks_complete_pct, unit: percent, target: 100, direction: below }
+    - { name: unreconciled_accounts, unit: count, target: 0, direction: above }
+    - { name: adjusting_entries, unit: count, window: 30d }
+    # A Big-4 benchmark close lands in 5–8 business days; the commitment
+    # here is the middle of that band.
+    - { name: days_to_close, unit: days, target: 6, direction: above }
+  series:
+    - { name: close_progress, unit: percent }
+  events:
+    - { type: close.started, severity: info }
+    - { type: subledger.closed, severity: info }
+    - { type: close.blocked, severity: warn }
+    - { type: entry.adjusted, severity: warn }
+    - { type: close.signed_off, severity: info }
+  tables:
+    # The close as a process rather than a checklist: what entered each
+    # stage and what has not left it yet. Monotonically non-increasing
+    # in process order, which is what makes the drop readable.
+    - name: close_stages
+      columns: [stage, count]
+    # The section a controller actually acts on: accounts that will not
+    # tie out without somebody deciding something.
+    - name: open_items
+      columns: [account, owner, days_open, amount_eur, blocker]
+    - name: close_checklist
+      columns: [task, owner, due_day, status]
+    # One row per contributing team, so a department roll-up ranks its
+    # ledgers by how long each takes to close.
+    - name: close_days_by_unit
+      columns: [unit, days_to_close]
+
+facets:
+  summary:
+    # Past day 8 the close is late by any published benchmark; past 12
+    # it is a reportable problem.
+    status: { from: days_to_close, warn_at: 8, critical_at: 12, direction: above }
+    kpis: [close_day, tasks_complete_pct, unreconciled_accounts, days_to_close]
+    sparkline: close_progress
+    headline: "day {{close_day}} of the close, {{tasks_complete_pct}}% complete, {{unreconciled_accounts}} accounts open"
+  timeline:
+    events: [close.started, subledger.closed, close.blocked, entry.adjusted, close.signed_off]
+    spans:
+      - { name: close, start: close.started, end: close.signed_off }
+    milestones: [close.started, close.signed_off]
+  detail:
+    # Reading order: where the close stands, how that compares to the
+    # committed number of days, where it is stuck, what is open, and the
+    # checklist underneath all of it.
+    panels:
+      - { title: Close progress, primitive: timeseries, data: series/close_progress, section: overview }
+      - { title: Days to close against target, primitive: kpi_card, data: kpi/days_to_close, section: performance }
+      - { title: Close stages, primitive: funnel, data: table/close_stages, section: drivers }
+      - { title: Days to close by team, primitive: bar_ranked, data: table/close_days_by_unit, section: drivers }
+      - { title: Open items needing a controller, primitive: datagrid, data: table/open_items, section: exceptions }
+      - { title: Close checklist, primitive: datagrid, data: table/close_checklist, section: detail }
+    drilldown: [budget-variance, decisions]
+  pulse:
+    events: [close.blocked, close.signed_off]
+    rate_limit: 5/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, events, tables]
+    prompts:
+      - "What is still open on this close?"
+      - "Why did this close take longer than last month?"
+      - "Which accounts have been unreconciled the longest?"

@@ -1,0 +1,173 @@
+# Facet contracts: the seven capability interfaces a ReportDefinition may
+# expose. Data-first: each facet defines a data shape; presentation is a
+# hint chosen from contracts/primitives.yaml. Consumers (dashboards,
+# timelines, media generators) are written against these shapes only.
+#
+# See docs/vision/reporting.md for the model.
+
+version: v1alpha1
+kind: FacetContracts
+
+facets:
+  - name: summary
+    question: "How are you doing?"
+    context: aggregate dashboard (this report as one tile among many)
+    fields:
+      required: [name]           # the minimal legal summary is a named,
+                                 # clickable box
+      optional:
+        - status                 # ok | warn | critical, derived from a
+                                 # KPI threshold rule or set directly
+        - kpis                   # up to ~4 named values with unit, delta
+        - sparkline              # one series reference for a trendline
+        - headline               # one TL;DR sentence (template or
+                                 # synthesized)
+
+  - name: detail
+    question: "Show me everything."
+    context: the report's own dashboard page
+    fields:
+      required: [panels]         # ordered list of {title, primitive,
+                                 # data} bindings
+      optional:
+        - drilldown              # typed links to sub-report definitions
+        - panels[].section       # where the panel sits in the reading
+                                 # order below; omit for a flat page
+
+  - name: plan
+    question: "What are we going to do?"
+    context: the board, the roadmap lane, the next-quarter list
+    fields:
+      required: [states]         # the ordered flow an item moves along.
+                                 # LEFT TO RIGHT IS THE SEMANTICS: it is
+                                 # what lets a realm roll six teams'
+                                 # boards into one without knowing what
+                                 # "in review" means at any of them. A
+                                 # set of columns is not a plan.
+      optional:
+        - lanes                  # parallel tracks a column is split by
+                                 # (squad, product, workstream)
+        - horizons               # now/next/later, or the quarters, in
+                                 # order — nearest first
+        - commitments            # committed | planned | candidate, in
+                                 # order — STRONGEST FIRST, because that
+                                 # order is what a bounded universe-level
+                                 # board drops by
+        - levels                 # which of the work-hierarchy levels
+                                 # this board publishes; see the note
+        - wip_limits             # {state: n}. A board that cannot state
+                                 # its limit cannot show that it is
+                                 # exceeded, which is most of what a
+                                 # board is read for.
+        - size_unit              # what `size` counts — points, days,
+                                 # eur. Same convention as a kpi's unit:
+                                 # a rolled-up size with no unit is a
+                                 # number nobody can act on.
+        - baseline               # {name, ref} — what the plan is
+                                 # measured against, as kpi/<name> or
+                                 # series/<name>. Without one a plan is a
+                                 # list of intentions, and the strategic
+                                 # stance has nothing to compare an
+                                 # actual to.
+    note: >
+      The other facets are retrospective or present-tense — what
+      happened, what is happening. This is the only one that says what is
+      INTENDED, and it exists because the strategic stance is defined as
+      "measured against a plan" while nothing modelled the plan.
+
+      It is a REPORT of a plan, not a plan. Items are published, stored
+      and rolled up; nothing tracks an item from one instance to the
+      next. An id is local to the payload it arrives in, `level` is a
+      label rather than a parent link, and no endpoint moves a card. See
+      docs/vision/hierarchy.md — the build models no work hierarchy, and
+      reporting a board is how it stays that way.
+
+      A flow has exactly one terminal state, the last one declared. Work
+      that leaves a plan without completing it — cancelled, stopped,
+      descoped — is not a further column: it is no longer planned, and
+      the event that removed it is what the timeline is for.
+
+      The degenerate plan is a checklist: two states and no flow.
+
+  - name: timeline
+    question: "When did things happen?"
+    context: merged temporal views; filterable by time, type, severity
+    fields:
+      required: [events]         # event types this report emits:
+                                 # {t, type, severity, label, attrs}
+      optional:
+        - spans                  # {name, start-event, end-event} pairs
+                                 # rendered as bars/gantt tracks
+        - milestones             # event types flagged as milestones
+    note: the degenerate timeline is one event — the report's creation.
+
+  - name: pulse
+    question: "What is happening right now?"
+    context: live activity rail, present at every dashboard level
+    fields:
+      required: [events]         # subset of timeline event types that
+                                 # stream live
+      optional:
+        - rate_limit             # e.g. "30/min" — producer-side bound
+
+  - name: media
+    question: "Say it as a briefing."
+    context: synthesized video/audio; see contracts/media.yaml
+    fields:
+      required: [archetypes]     # which script archetypes apply
+      optional: [pacing, personas, storyboard]
+
+  - name: conversation
+    question: "Answer my questions."
+    context: on-demand Q&A grounded in this report's data
+    fields:
+      required: [grounding]      # which data (kpis/series/events/tables)
+                                 # is exposed as context
+      optional:
+        - prompts                # example questions this report answers
+
+# The reading order of a detail page. A report answers four questions in
+# this sequence — what happened, why, what needs attention, what should
+# we do — and the sections are how a definition says which panel serves
+# which. The last of those four went unanswered until the `plan` facet
+# existed: `next` is where it landed. Optional: a definition that names no sections renders as one
+# ordered list, which is what every definition did before this existed.
+#
+# The point of naming them is that the sequence, not the widget count,
+# is what makes a report readable. A page of twenty equally prominent
+# panels has no argument in it.
+panel_sections:
+  - name: overview
+    question: "What happened?"
+    holds: >
+      Four to six KPIs with their targets, one trend, one breakdown.
+      The whole answer, before any of the reasoning.
+  - name: performance
+    question: "How does that compare?"
+    holds: >
+      Actual against target and against the previous period — the
+      comparison that turns a number into a judgement.
+  - name: drivers
+    question: "Why did it change?"
+    holds: >
+      Waterfall, ranked bars, or a decomposition tree: the movement
+      attributed to the things that caused it.
+  - name: exceptions
+    question: "What needs attention?"
+    holds: >
+      The items requiring a decision or an intervention, and nothing
+      else. This is the section a reader acts on.
+  - name: next
+    question: "What are we going to do about it?"
+    holds: >
+      The committed response: the board, the lanes, or the next horizon.
+      Every section above establishes a finding; this is the one that
+      answers it. It sits ahead of `detail` because `detail` is the
+      matrix underneath everything, and a page whose argument ends on a
+      table has stopped before the conclusion.
+
+  - name: detail
+    question: "What are the precise numbers?"
+    holds: >
+      The searchable matrix or table underneath everything above, with
+      sparklines and variance columns where a row has history.

@@ -1,0 +1,4 @@
+# Mission Control's build output (internal/dashboard/web/) is not committed
+# any more — only the hand-written placeholder index.html is — so nothing
+# under web/ needs marking as generated. Lockfiles are.
+internal/dashboard/ui/package-lock.json linguist-generated=true

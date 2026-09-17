@@ -1,0 +1,60 @@
+# Media contracts: synthesized video/audio generation from report data,
+# and the interactive virtual-meeting engine. These are delivery
+# contracts — what a generator consumes — not renderer implementations.
+# A deployment without a generation model behind it simply has no media
+# facet; the contract makes that absence explicit.
+
+version: v1alpha1
+kind: MediaContracts
+
+archetypes:
+  - name: anchor
+    style: news anchor / executive broadcast
+    description: >
+      Formal single-avatar presenter delivering headline summaries;
+      lower-third tickers for live alerts, side-graphic charts for
+      primary metrics.
+  - name: podcast
+    style: co-hosted tech podcast
+    description: >
+      Multi-persona dialogue (e.g. an Incident Lead with a FinOps
+      Analyst) contextualizing raw data through Q&A, trade-off debate,
+      and conversational synthesis.
+  - name: screencast
+    style: automated walkthrough
+    description: >
+      Auto-rendered cursor movement, pans, and highlights over topology
+      or DAG views showing exact execution paths.
+  - name: recap
+    style: investigative incident recap
+    description: >
+      Narrative autopsy reconstructing a failure chronologically —
+      what went wrong when — over visual timelines and diff overlays.
+
+# The generation contract every archetype request conforms to.
+generation_contract:
+  pacing:
+    runtime_bounds: [60s, 180s]          # micro-brief .. deep dive
+    tones: [executive_brief, urgent_incident, casual_debrief]
+  storyboard:
+    description: >
+      Binds data widgets to script timestamps: "render kpi_card at
+      00:05", "focus flamegraph at 00:22". Widget names come from
+      contracts/primitives.yaml; data references from the definition's
+      data contract.
+  personas:
+    description: >
+      Avatar appearance, voice parameters, and domain authority per
+      speaker. Personas are deployment assets referenced by name.
+
+# Interactive simulation rather than a rendered artifact.
+virtual_meeting:
+  inputs: [report_payload, agenda, domain_context]   # SLAs, history
+  personas:
+    description: >
+      AI participants with explicit stakeholder lenses (CFO: budget,
+      Security: compliance, SRE: reliability) grounded in the report
+      payload as truth.
+  traversal: >
+    The human drives the agenda; persona agents offer localized
+    opinions, push back on risks, and answer targeted questions.

@@ -1,0 +1,108 @@
+# Report template: hiring — what talent acquisition is actually doing.
+# A recruiting team's week is a pipeline, not a deploy log: requisitions
+# open, candidates move through a loop, offers go out, and some of them
+# come back signed. Categorised as delivery (an accepted offer is
+# shipped work) and roadmap (an open req is a plan with a date on it).
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: hiring
+description: Requisitions, pipeline, offers, and time to fill.
+categories: [delivery, roadmap]
+modalities: [glance, delta]
+stances: [strategic, operational]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # Counts sum; rates do not. Adding two teams' acceptance
+    # percentages together is the single easiest way to publish a
+    # number nobody can act on.
+    kpis:
+      open_reqs: sum
+      offers_out: sum
+      hires: sum
+      pipeline_candidates: sum
+      offer_accept_pct: avg
+      time_to_fill_days: avg
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: open_reqs, unit: count, window: 7d }
+    - { name: offers_out, unit: count, window: 7d }
+    # Industry-standard offer acceptance sits in the high eighties;
+    # below that the level, the package or the loop is the problem.
+    - { name: offer_accept_pct, unit: percent, window: 7d, target: 88, direction: below }
+    # Time to fill is the number a hiring manager actually feels.
+    # Forty-five days is a normal commitment for a mixed-seniority
+    # requisition set; exec search is always longer and always excused.
+    - { name: time_to_fill_days, unit: days, window: 90d, target: 45, direction: above }
+    - { name: hires, unit: count, window: 7d }
+    - { name: pipeline_candidates, unit: count, window: 7d }
+  series:
+    - { name: hires_trend, unit: per-week }
+    - { name: pipeline_growth, unit: count }
+  events:
+    - { type: req.opened, severity: info }
+    - { type: offer.extended, severity: info }
+    - { type: offer.accepted, severity: info }
+    - { type: offer.declined, severity: warn }
+    - { type: req.aged, severity: warn }
+  tables:
+    # Applied -> screened -> onsite -> offer -> hired. The drop between
+    # any two stages is the only honest way to read a pipeline: a
+    # single-digit percentage of applicants ever sees an offer, and a
+    # funnel that hides that is a recruiting brochure, not a report.
+    - name: hiring_funnel
+      columns: [stage, count]
+    - name: open_reqs_by_function
+      columns: [function, open_reqs, days_open]
+    # The requisitions past their SLA, and nothing else — this is the
+    # part a head of talent works from on a Monday.
+    - name: aging_reqs
+      columns: [req, function, hiring_manager, days_open, stage]
+    - name: recent_offers
+      columns: [when, role, function, level, status]
+    - name: hires_by_unit
+      columns: [unit, hires]
+
+facets:
+  summary:
+    status: { from: time_to_fill_days, warn_at: 55, critical_at: 75, direction: above }
+    kpis: [open_reqs, hires, offer_accept_pct, time_to_fill_days]
+    sparkline: hires_trend
+    headline: "{{open_reqs}} open reqs, {{hires}} hires this week at {{offer_accept_pct}}% acceptance"
+  timeline:
+    events: [req.opened, offer.extended, offer.accepted, offer.declined, req.aged]
+    # A requisition is a span, not a point: it opens, and much later
+    # somebody signs.
+    spans:
+      - { name: requisition, start: req.opened, end: offer.accepted }
+    milestones: [offer.accepted]
+  detail:
+    panels:
+      - { title: Hires per week, primitive: timeseries, data: series/hires_trend, section: overview }
+      - { title: Offer acceptance against target, primitive: kpi_card, data: kpi/offer_accept_pct, section: performance }
+      - { title: Candidate pipeline, primitive: funnel, data: table/hiring_funnel, section: drivers }
+      - { title: Open requisitions by function, primitive: bar_ranked, data: table/open_reqs_by_function, section: drivers }
+      - { title: Hires by unit, primitive: bar_ranked, data: table/hires_by_unit, section: drivers }
+      - { title: Requisitions past SLA, primitive: datagrid, data: table/aging_reqs, section: exceptions }
+      - { title: Recent offers, primitive: datagrid, data: table/recent_offers, section: detail }
+    drilldown: [workforce, activity, cost]
+  pulse:
+    events: [offer.accepted, offer.declined, req.aged]
+    rate_limit: 10/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "Which requisitions are past their time-to-fill target?"
+      - "Where is the pipeline losing the most candidates?"

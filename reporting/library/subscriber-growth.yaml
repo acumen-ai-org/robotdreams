@@ -1,0 +1,121 @@
+# Report template: subscriber-growth — the most important number in a
+# subscription business, and the one every other department's work
+# eventually shows up in. Produced by a market team (the people who own
+# a country's users), rolled up to a regional department, then to the
+# markets division, where it should reconcile to the company's reported
+# MAU and Premium totals rather than to some multiple of them.
+#
+# That reconciliation is the whole design constraint here. Counts sum;
+# rates and per-user amounts do not, because six markets averaging €4.55
+# ARPU do not between them earn €27. Get that wrong and the division
+# tile reads six times the truth, which is worse than showing nothing.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: subscriber-growth
+description: Users, subscribers, and the movements between them.
+categories: [performance]
+modalities: [glance, delta, narrative]
+stances: [strategic]
+
+scope:
+  attach: [site, realm, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      # Counts of distinct people add up across markets — a user is in
+      # exactly one market, so the division total is the sum.
+      mau: sum
+      premium_subs: sum
+      net_adds: sum
+      # These three are per-user or per-subscriber ratios. Summing them
+      # is meaningless: it would claim the company churns at the sum of
+      # its markets' churn rates. avg is the honest cheap answer; a
+      # subscriber-weighted mean would be better still, and is what a
+      # finance team would compute by hand from the by-unit table.
+      churn_pct: avg
+      arpu_eur: avg
+      free_to_paid_pct: avg
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: mau, unit: count, window: 7d }
+    - { name: premium_subs, unit: count, window: 7d }
+    # Net adds is the number a market commits to in its plan, so the
+    # target is per-market and lives on the instance.
+    - { name: net_adds, unit: count, window: 7d, direction: below }
+    # Monthly premium churn. The default target is the company line a
+    # market is expected to hold; mature markets commit to better.
+    - { name: churn_pct, unit: percent, window: 30d, target: 4.0, direction: above }
+    - { name: arpu_eur, unit: currency, window: 30d, direction: below }
+    # Trial-to-paid conversion, not free-base penetration: the rate the
+    # growth team can actually move inside a week.
+    - { name: free_to_paid_pct, unit: percent, window: 7d, target: 55, direction: below }
+  series:
+    - { name: mau_trend, unit: count }
+    - { name: net_adds_rate, unit: per-day }
+  events:
+    - { type: growth.milestone, severity: info }
+    - { type: growth.target_missed, severity: warn }
+    - { type: growth.churn_spike, severity: critical }
+  tables:
+    # The classic subscriber bridge, and the reason this report exists:
+    # opening subscribers, gross adds, the two kinds of churn, closing
+    # subscribers. kind is `total` for the two ends, `delta` between.
+    # Voluntary churn is a product problem; involuntary churn is a
+    # payments problem, and they are separated because they are fixed
+    # by different teams.
+    - name: subscriber_bridge
+      columns: [step, amount, kind]
+    # Free base to retained subscriber, in process order.
+    - name: growth_funnel
+      columns: [stage, count]
+    # The plan mix underneath the blended ARPU: individual, duo,
+    # family, student. Blended ARPU moves mostly because this moved.
+    - name: plan_mix
+      columns: [plan, subscribers, arpu_eur, churn_pct]
+    # One row per market, so the regional and divisional roll-ups get a
+    # ranked bar of the markets beneath them for free.
+    - name: premium_by_unit
+      columns: [unit, premium_subs]
+
+facets:
+  summary:
+    # Churn is the status signal rather than net adds: a market can post
+    # good net adds for a quarter while its retention rots underneath.
+    status: { from: churn_pct, warn_at: 4.5, critical_at: 6.0, direction: above }
+    kpis: [mau, premium_subs, net_adds, churn_pct, arpu_eur]
+    sparkline: net_adds_rate
+    headline: "{{premium_subs}} premium of {{mau}} monthly actives, {{net_adds}} net this week"
+  timeline:
+    events: [growth.milestone, growth.target_missed, growth.churn_spike]
+    milestones: [growth.milestone]
+  detail:
+    panels:
+      - { title: Monthly actives, primitive: timeseries, data: series/mau_trend, section: overview }
+      - { title: Net adds against plan, primitive: kpi_card, data: kpi/net_adds, section: performance }
+      - { title: Subscriber bridge, primitive: waterfall, data: table/subscriber_bridge, section: drivers }
+      - { title: Free to retained, primitive: funnel, data: table/growth_funnel, section: drivers }
+      - { title: Premium subscribers by market, primitive: bar_ranked, data: table/premium_by_unit, section: drivers }
+      - { title: Growth alerts, primitive: ticker, data: events, section: exceptions }
+      - { title: Plan mix, primitive: datagrid, data: table/plan_mix, section: detail }
+    # Where a market lead goes when the number moves: what marketing
+    # spent to get them, and what support heard from the ones who left.
+    drilldown: [campaign, support-queue]
+  pulse:
+    events: [growth.churn_spike]
+    rate_limit: 6/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "What moved premium subscribers this week?"
+      - "Which markets are losing subscribers to involuntary churn?"
+      - "Is blended ARPU falling because of price or because of plan mix?"

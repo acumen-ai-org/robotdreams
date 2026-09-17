@@ -1,0 +1,103 @@
+# Report template: workforce — the people picture. Not hiring (which is
+# a pipeline) and not cost (which is money): this is who is here, who
+# left, and whether the ones who stayed would recommend the place.
+# Categorised as quality — whether the work was right, applied to the
+# organisation itself — and roadmap, because headcount is a plan with a
+# number on it.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: workforce
+description: Headcount, attrition, engagement, and movement.
+categories: [quality, roadmap]
+modalities: [glance, delta, narrative]
+stances: [strategic, operational]
+
+scope:
+  attach: [site, realm, world]
+  aggregation:
+    status: worst
+    headline: synthesize
+    # headcount and its variance to plan are FTE counts, so they sum
+    # and the roll-up reconciles with the org chart beneath it. Every
+    # other field here is a rate about people, and rates average.
+    kpis:
+      headcount: sum
+      headcount_vs_plan: sum
+      regretted_attrition_pct: avg
+      enps: avg
+      absence_pct: avg
+      internal_mobility_pct: avg
+    timeline: merge
+    pulse: sample(20)
+
+data:
+  kpis:
+    - { name: headcount, unit: count, window: 7d }
+    # FTE against the approved plan, signed: negative is under plan.
+    # Kept as a count rather than a percentage precisely so it sums.
+    - { name: headcount_vs_plan, unit: count, window: 7d }
+    # Regretted attrition is the only attrition number worth a target:
+    # 6-10% annualised is healthy for a company this size, and past
+    # ten the exit interviews stop being anecdotes.
+    - { name: regretted_attrition_pct, unit: percent, window: 365d, target: 8, direction: above }
+    # eNPS runs -100..100. Twenty is respectable, forty is very good.
+    - { name: enps, unit: score, window: 90d, target: 25, direction: below }
+    - { name: absence_pct, unit: percent, window: 30d }
+    - { name: internal_mobility_pct, unit: percent, window: 365d }
+  series:
+    - { name: headcount_trend, unit: count }
+    - { name: attrition_trend, unit: percent }
+  events:
+    - { type: joiner.started, severity: info }
+    - { type: survey.closed, severity: info }
+    - { type: leaver.resigned, severity: warn }
+    - { type: attrition.spike, severity: critical }
+  tables:
+    # The centrepiece. Opening + hires + transfers in - voluntary exits
+    # - involuntary exits = closing, where closing is the org chart's
+    # own number. A headcount bridge that does not land on the real
+    # headcount is the fastest way to lose an audience of one.
+    - name: headcount_bridge
+      columns: [step, amount, kind]
+    - name: attrition_by_reason
+      columns: [reason, leavers]
+    - name: retention_watchlist
+      columns: [role, unit, risk, note, owner]
+    - name: headcount_detail
+      columns: [unit, headcount, plan, joiners_12m, leavers_12m, attrition_pct]
+    - name: headcount_by_unit
+      columns: [unit, headcount]
+
+facets:
+  summary:
+    status: { from: regretted_attrition_pct, warn_at: 10, critical_at: 14, direction: above }
+    kpis: [headcount, headcount_vs_plan, regretted_attrition_pct, enps]
+    sparkline: headcount_trend
+    headline: "{{headcount}} FTE, {{regretted_attrition_pct}}% regretted attrition, eNPS {{enps}}"
+  timeline:
+    events: [joiner.started, leaver.resigned, survey.closed, attrition.spike]
+    milestones: [survey.closed, attrition.spike]
+  detail:
+    panels:
+      - { title: Headcount over time, primitive: timeseries, data: series/headcount_trend, section: overview }
+      - { title: Regretted attrition against target, primitive: kpi_card, data: kpi/regretted_attrition_pct, section: performance }
+      - { title: How headcount moved, primitive: waterfall, data: table/headcount_bridge, section: drivers }
+      - { title: Why people left, primitive: bar_ranked, data: table/attrition_by_reason, section: drivers }
+      - { title: Headcount by unit, primitive: bar_ranked, data: table/headcount_by_unit, section: drivers }
+      - { title: Retention watchlist, primitive: datagrid, data: table/retention_watchlist, section: exceptions }
+      - { title: Headcount against plan, primitive: datagrid, data: table/headcount_detail, section: detail }
+    drilldown: [hiring, activity, cost]
+  pulse:
+    events: [leaver.resigned, attrition.spike]
+    rate_limit: 6/min
+  media:
+    archetypes: [anchor, recap]
+  conversation:
+    grounding: [kpis, series, tables]
+    prompts:
+      - "What moved headcount this quarter?"
+      - "Which units are furthest under plan?"

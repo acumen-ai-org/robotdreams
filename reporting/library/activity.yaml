@@ -1,0 +1,82 @@
+# Report template: activity — the pulse. Live signal on what is
+# happening right now, designed to surface at every dashboard level.
+# Copy, rename, and adapt.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: activity
+description: Current activity — live task and node events at any scope.
+categories: [activity]
+modalities: [glance, storyboard]
+stances: [operational, diagnostic]
+
+scope:
+  attach: [site, realm, world, universe]
+  aggregation:
+    status: worst
+    headline: latest
+    kpis:
+      active_nodes: sum
+      tasks_in_flight: sum
+      tasks_finished: sum
+      # What the work cost. All three are counters, so a realm's cost is
+      # the sum of its factories'. An instance that carries no figure
+      # contributes nothing to the sum — a run whose model reported no
+      # usage is unmeasured, not free.
+      tokens_in: sum
+      tokens_out: sum
+      cost_usd: sum
+    timeline: merge
+    pulse: sample(80)
+    # Over a period (period=week on the API), each site's instances fold
+    # into one before the roll-up above applies. Counters sum: a week's
+    # tokens are every run's tokens. The gauges (active_nodes,
+    # tasks_in_flight) keep the default, latest — Monday's node count
+    # added to Tuesday's is not a number anyone asked for.
+    time:
+      kpis:
+        tasks_finished: sum
+        tokens_in: sum
+        tokens_out: sum
+        cost_usd: sum
+
+data:
+  kpis:
+    - { name: active_nodes, unit: count }
+    - { name: tasks_in_flight, unit: count }
+    - { name: tasks_finished, unit: count, window: 1h }
+    # Run cost, posted by the node that finished the task: input tokens
+    # (cache reads and creations included), output tokens, and the
+    # model's own total in USD. Not on the summary — the pulse stays
+    # about activity — but declared here so an instance may carry them
+    # and a cost panel can read them.
+    - { name: tokens_in, unit: count, window: 1h }
+    - { name: tokens_out, unit: count, window: 1h }
+    - { name: cost_usd, unit: count, window: 1h, direction: above }
+  events:
+    - { type: task.started, severity: info }
+    - { type: task.finished, severity: info }
+    - { type: task.blocked, severity: warn }
+    - { type: node.connected, severity: info }
+    - { type: node.disconnected, severity: warn }
+
+facets:
+  summary:
+    status: { from: tasks_in_flight, warn_at: 50, critical_at: 200, direction: above }
+    kpis: [active_nodes, tasks_in_flight, tasks_finished]
+    headline: "{{active_nodes}} nodes active, {{tasks_in_flight}} tasks in flight"
+  timeline:
+    events: [task.started, task.finished, task.blocked, node.connected, node.disconnected]
+    spans:
+      - { name: task, start: task.started, end: task.finished }
+  detail:
+    panels:
+      - { title: Live activity, primitive: ticker, data: events, section: overview }
+      - { title: Task windows, primitive: gantt, data: spans/task, section: detail }
+      - { title: Spend, primitive: kpi_card, data: kpi/cost_usd, section: drivers }
+  pulse:
+    events: [task.started, task.finished, task.blocked, node.connected, node.disconnected]
+    rate_limit: 120/min

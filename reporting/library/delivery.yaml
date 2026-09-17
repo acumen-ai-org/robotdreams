@@ -1,0 +1,76 @@
+# Report template: delivery — shipped work (deploys, releases,
+# completed handoffs). Copy, rename, and adapt; this is a starting
+# point, not a fixed example. The full facet exercise: summary,
+# timeline, detail, pulse, media, conversation.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: delivery
+description: Deploys, releases, and completed handoffs over time.
+categories: [delivery]
+modalities: [glance, narrative, delta, storyboard]
+stances: [operational, strategic]
+
+scope:
+  attach: [site, realm]
+  aggregation:
+    status: worst
+    headline: synthesize
+    kpis:
+      deploys: sum
+      failed_deploys: sum
+      lead_time_minutes: p50
+    timeline: merge
+    pulse: sample(50)
+
+data:
+  kpis:
+    - { name: deploys, unit: count, window: 24h }
+    # DORA's elite band is under one change failure in six and under a
+    # day from commit to production; these targets are that, sharpened.
+    - { name: failed_deploys, unit: count, window: 24h, target: 0, direction: above }
+    - { name: lead_time_minutes, unit: minutes, window: 24h, target: 60, direction: above }
+  series:
+    - { name: deploy_frequency, unit: per-hour }
+  events:
+    - { type: deploy.started, severity: info }
+    - { type: deploy.finished, severity: info }
+    - { type: deploy.rolled_back, severity: warn }
+    - { type: release.tagged, severity: info }
+  tables:
+    - name: recent_deploys
+      columns: [when, service, version, status, duration]
+    - name: deploys_by_unit
+      columns: [unit, deploys]
+
+facets:
+  summary:
+    status: { from: failed_deploys, warn_at: 1, critical_at: 3, direction: above }
+    kpis: [deploys, failed_deploys, lead_time_minutes]
+    sparkline: deploy_frequency
+    headline: "{{deploys}} deploys, {{failed_deploys}} failed, lead time {{lead_time_minutes}}m"
+  timeline:
+    events: [deploy.started, deploy.finished, deploy.rolled_back, release.tagged]
+    spans:
+      - { name: deploy, start: deploy.started, end: deploy.finished }
+    milestones: [release.tagged]
+  detail:
+    panels:
+      - { title: Deploy frequency, primitive: timeseries, data: series/deploy_frequency, section: overview }
+      - { title: Lead time against target, primitive: kpi_card, data: kpi/lead_time_minutes, section: performance }
+      - { title: Deploys by unit, primitive: bar_ranked, data: table/deploys_by_unit, section: drivers }
+      - { title: Recent deploys, primitive: datagrid, data: table/recent_deploys, section: detail }
+    drilldown: [incident, logs]
+  pulse:
+    events: [deploy.started, deploy.finished, deploy.rolled_back]
+    rate_limit: 30/min
+  media:
+    archetypes: [anchor, screencast]
+  conversation:
+    grounding: [kpis, events, tables]
+    prompts:
+      - "What shipped in the last 24 hours?"
+      - "Why did lead time change?"

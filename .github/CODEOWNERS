@@ -1,0 +1,4 @@
+# Every change needs a review from an owner (enforced by the ruleset on
+# main). Two accounts are listed so that a pull request opened by one can
+# be approved by the other — GitHub never counts an author's own review.
+* @acumen-ai @fredrikcelin

@@ -1,0 +1,60 @@
+# Report template: logs — log volume, error lines, and drill-down into
+# raw buffers. Copy, rename, and adapt.
+#
+# Register with:
+#   dream server --reports reporting/library/
+
+version: v1alpha1
+kind: ReportDefinition
+name: logs
+description: Log volume and notable lines across components.
+categories: [logs]
+modalities: [glance, delta]
+stances: [diagnostic]
+
+scope:
+  attach: [site]
+  aggregation:
+    status: worst
+    headline: top(1)
+    kpis:
+      log_lines: sum
+      error_lines: sum
+      warn_lines: sum
+    timeline: merge
+    pulse: sample(100)
+
+data:
+  kpis:
+    - { name: log_lines, unit: count, window: 1h }
+    - { name: error_lines, unit: count, window: 1h }
+    - { name: warn_lines, unit: count, window: 1h }
+  series:
+    - { name: log_volume, unit: per-minute }
+  events:
+    - { type: log.error, severity: critical }
+    - { type: log.warn, severity: warn }
+  tables:
+    - name: recent_errors
+      columns: [when, component, level, message]
+    # Which unit is producing the errors — the first question asked of
+    # any error count above zero.
+    - name: errors_by_unit
+      columns: [unit, error_lines]
+
+facets:
+  summary:
+    status: { from: error_lines, warn_at: 1, critical_at: 25, direction: above }
+    kpis: [log_lines, error_lines, warn_lines]
+    sparkline: log_volume
+    headline: "{{error_lines}} errors in {{log_lines}} lines"
+  timeline:
+    events: [log.error, log.warn]
+  detail:
+    panels:
+      - { title: Log volume, primitive: timeseries, data: series/log_volume, section: overview }
+      - { title: Errors by unit, primitive: bar_ranked, data: table/errors_by_unit, section: drivers }
+      - { title: Recent errors, primitive: logbuffer, data: table/recent_errors, section: detail }
+  pulse:
+    events: [log.error]
+    rate_limit: 60/min
