@@ -1,0 +1,37 @@
+{
+  "name": "robotdreams",
+  "version": "0.1.0",
+  "description": "Robot Dreams `dream` CLI: a lightweight control plane for fleets of autonomous software agents. npm wrapper that downloads the prebuilt Go binary for your platform.",
+  "license": "Apache-2.0",
+  "author": "Acumen AI",
+  "homepage": "https://github.com/acumen-ai-org/robotdreams#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acumen-ai-org/robotdreams.git",
+    "directory": "npm"
+  },
+  "bugs": {
+    "url": "https://github.com/acumen-ai-org/robotdreams/issues"
+  },
+  "keywords": [
+    "agents",
+    "control-plane",
+    "cli",
+    "robotdreams",
+    "dream"
+  ],
+  "bin": {
+    "dream": "bin/dream.js",
+    "robotdreams": "bin/dream.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

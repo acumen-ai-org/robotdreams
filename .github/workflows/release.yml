@@ -1,0 +1,115 @@
+# Cut a release on a v* tag: GoReleaser builds the dream binaries (with
+# Mission Control embedded — .goreleaser.yaml's before hooks build the UI,
+# which is why Node is set up here) and publishes the GitHub Release; then
+# the npm launcher package is published if an NPM_TOKEN secret exists.
+#
+# Actions are pinned to full commit SHAs; the tag is in the comment.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  # release-please creates the tag with GITHUB_TOKEN, and events made with
+  # that token never start other workflows. Either give release-please a
+  # PAT (RELEASE_PLEASE_TOKEN secret) so the tag push triggers this, or run
+  # it by hand for the tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. v0.1.0); must already exist"
+        required: true
+        type: string
+
+# Default to nothing; each job asks for exactly what it needs.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # create the GitHub Release and upload archives
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # GoReleaser needs the full history for the changelog
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up Node (Mission Control build, via .goreleaser.yaml hooks)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: internal/dashboard/ui/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  npm-publish:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # npm provenance attestation (public repositories only)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check for NPM_TOKEN
+        id: npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NPM_TOKEN secret is not set - skipping npm publish. Add the secret to enable publishing the robotdreams npm package on tagged releases."
+          fi
+
+      - name: Set up Node
+        if: steps.npm.outputs.present == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Sync npm package version from tag
+        if: steps.npm.outputs.present == 'true'
+        working-directory: npm
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          npm version --no-git-tag-version --allow-same-version "${tag#v}"
+
+      - name: Self-test launcher platform mapping
+        if: steps.npm.outputs.present == 'true'
+        working-directory: npm
+        run: node scripts/install.js --self-test
+
+      - name: Publish to npm
+        if: steps.npm.outputs.present == 'true'
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Provenance requires a public repository; skip the flag while private.
+          PROVENANCE_FLAG: ${{ github.event.repository.visibility == 'public' && '--provenance' || '' }}
+        run: npm publish --access public $PROVENANCE_FLAG

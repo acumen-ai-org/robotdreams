@@ -34,6 +34,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # web/ must track exactly the placeholder page; dist/ is build output
+      # and gitignored. If this fails a build was force-added.
+      - name: Dashboard placeholder is intact (no build output committed)
+        run: |
+          tracked="$(git ls-files internal/dashboard/web)"
+          if [ "$tracked" != "internal/dashboard/web/placeholder/index.html" ]; then
+            echo "::error::internal/dashboard/web must track only placeholder/index.html, got:"
+            echo "$tracked"
+            exit 1
+          fi
+
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -117,3 +128,24 @@ jobs:
           go-version-file: go.mod
           go-package: ./...
           repo-checkout: false
+
+  # The release archive naming contract lives in .goreleaser.yaml and is
+  # mirrored by two consumers: npm/scripts/install.js and
+  # internal/selfupdate/release.go. The Go copy is pinned to the YAML by
+  # TestGoreleaserContractUnchanged in `go test ./...`; this job is the
+  # matching guard for the JS copy, run before a tag is cut.
+  npm-launcher:
+    name: npm launcher self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Installer self-test (archive naming contract)
+        run: node npm/scripts/install.js --self-test
