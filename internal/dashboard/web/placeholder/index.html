@@ -1,0 +1,46 @@
+<!doctype html>
+<!--
+  This is the committed PLACEHOLDER for Mission Control, not the dashboard.
+
+  The real dashboard is a Vite build of internal/dashboard/ui whose output
+  lands next to this one in internal/dashboard/web/dist/ and is embedded into
+  the dream binary by internal/dashboard/embed.go. That output is not
+  committed; this file is, so that `go build` on a fresh clone still
+  has something to embed. To build the dashboard:
+
+      make ui-build        # or: cd internal/dashboard/ui && npm ci && npm run build
+
+  and then `make build`. `make build` already does both. The Vite build
+  overwrites this file; `make ui-clean` puts it back.
+
+  The DREAM_API_BASE comment marker in <head> below is replaced by
+  internal/dashboard/server.go exactly as in the real index.html.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Robot Dreams — Mission Control (not built)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--DREAM_API_BASE-->
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 3rem auto; max-width: 40rem; padding: 0 1rem; color: #222; }
+      code, pre { font-family: ui-monospace, monospace; background: #f3f3f3; padding: 0.1rem 0.3rem; }
+      pre { padding: 0.75rem 1rem; overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Mission Control was not built into this binary</h1>
+    <p>
+      This <code>dream</code> binary was compiled without the dashboard's
+      Vite build output. The API it serves is unaffected; only this UI is
+      missing.
+    </p>
+    <p>To build a binary that includes Mission Control, run from the repository root:</p>
+    <pre>make build</pre>
+    <p>
+      which builds the UI (<code>internal/dashboard/ui</code>, Node 22+)
+      into <code>internal/dashboard/web/</code> and then compiles the Go
+      binary with it embedded. See <code>docs/dashboard.md</code>.
+    </p>
+  </body>
+</html>
