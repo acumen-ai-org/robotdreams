@@ -1,9 +1,3 @@
-# Report template: performance — latency, throughput, capacity.
-# Copy, rename, and adapt.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: performance
@@ -27,9 +21,6 @@ scope:
 
 data:
   kpis:
-    # Targets are the team's own latency budget and error budget, so
-    # the definition carries only a default; the instance overrides it
-    # per scope. direction says which side of the target is the bad one.
     - { name: p95_latency_ms, unit: ms, window: 1h, target: 300, direction: above }
     - { name: throughput_per_min, unit: per-minute, window: 1h }
     - { name: error_rate_pct, unit: percent, window: 1h, target: 1, direction: above }
@@ -38,9 +29,6 @@ data:
     - { name: latency, unit: ms }
     - { name: throughput, unit: per-minute }
   tables:
-    # One row per team, so a realm ranks the teams beneath it without
-    # any aggregation rule beyond the row concatenation the API already
-    # does. "Which of these is slowest" is the question a lead asks.
     - name: latency_by_unit
       columns: [unit, p95_latency_ms]
   events:
@@ -58,8 +46,6 @@ facets:
     spans:
       - { name: degradation, start: perf.degraded, end: perf.recovered }
   detail:
-    # Sections put the page in reading order: what happened, how it
-    # compares, why, what needs a decision, then the numbers.
     panels:
       - { title: Latency, primitive: timeseries, data: series/latency, section: overview }
       - { title: Throughput, primitive: timeseries, data: series/throughput, section: overview }

@@ -2,12 +2,7 @@ package reporting
 
 import "strings"
 
-// Scope paths are slash-separated labels, not enforced containers, e.g.
-// "acme/music/platform/deploy-squad". Depth is what the code operates on;
-// the level names are advisory (see contracts/aggregations.yaml).
-
-// SplitScope splits a scope path into its segments, trimming whitespace
-// and dropping empty segments, so "/acme//music/" yields [acme music].
+// SplitScope splits a scope path into its non-empty, trimmed segments.
 func SplitScope(path string) []string {
 	var segs []string
 	for _, s := range strings.Split(path, "/") {
@@ -19,15 +14,12 @@ func SplitScope(path string) []string {
 	return segs
 }
 
-// ScopeDepth returns the number of segments in a scope path; the empty
-// path has depth 0.
+// ScopeDepth returns the number of segments in a scope path; the empty path has depth 0.
 func ScopeDepth(path string) int {
 	return len(SplitScope(path))
 }
 
-// LevelName returns the advisory level name for a scope path depth:
-// 1..4 map to universe, world, realm, site; anything deeper is still
-// "site"; depth 0 (or less) is "root".
+// LevelName returns the advisory level name for a scope depth: root, universe, world, realm or site.
 func LevelName(depth int) string {
 	switch {
 	case depth <= 0:
@@ -39,9 +31,7 @@ func LevelName(depth int) string {
 	}
 }
 
-// ScopeWithin reports whether child is at or below parent: parent's
-// segments must be a prefix of child's. The empty parent contains every
-// scope, and every scope is within itself.
+// ScopeWithin reports whether child is at or below parent.
 func ScopeWithin(parent, child string) bool {
 	p := SplitScope(parent)
 	c := SplitScope(child)
@@ -56,8 +46,7 @@ func ScopeWithin(parent, child string) bool {
 	return true
 }
 
-// ParentScope returns the scope path one level up, or "" for paths of
-// depth 0 or 1.
+// ParentScope returns the scope path one level up, or "" for paths of depth 0 or 1.
 func ParentScope(path string) string {
 	segs := SplitScope(path)
 	if len(segs) <= 1 {

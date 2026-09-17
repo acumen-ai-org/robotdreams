@@ -1,18 +1,3 @@
-# Report template: todo — one team's list.
-#
-# The degenerate plan, and it is in the library on purpose. Every other
-# planning definition here has columns, lanes, horizons and commitment
-# grading; this one has two states, no lanes, no horizons, no dependency
-# edges and no altitude above it. If the plan facet needs any of those to
-# work, it is not a contract — it is a kanban board with a schema, and the
-# first deployment that just keeps a list would have to lie to use it.
-#
-# So the acceptance test for the facet is that this file is boring, and
-# that a `checklist` renders it without a special case.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: todo
@@ -45,9 +30,6 @@ facets:
     kpis: [items_open, items_done]
     headline: "{{items_done}} done, {{items_open}} left"
   plan:
-    # Two states. That is the entire flow, and the point of the file —
-    # spelled with the shared vocabulary's words so even the floor case
-    # aggregates cleanly.
     states: [committed, done]
     levels: [task]
   timeline:

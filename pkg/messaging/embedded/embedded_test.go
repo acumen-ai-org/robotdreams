@@ -11,8 +11,6 @@ import (
 	"github.com/acumen-ai-org/robotdreams/pkg/messaging/testsuite"
 )
 
-// TestConformance runs the shared messaging.MessagingBackend conformance
-// suite against a fresh SQLite-backed Backend per subtest.
 func TestConformance(t *testing.T) {
 	testsuite.RunConformance(t, func() messaging.MessagingBackend {
 		dbPath := filepath.Join(t.TempDir(), "test.db")
@@ -24,9 +22,6 @@ func TestConformance(t *testing.T) {
 	})
 }
 
-// TestPersistenceAcrossReopen verifies that messages emitted before Close
-// are still visible after reopening a Backend against the same database
-// file path.
 func TestPersistenceAcrossReopen(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "persist.db")
 
@@ -75,22 +70,6 @@ func TestPersistenceAcrossReopen(t *testing.T) {
 	}
 }
 
-// TestAckedMessagesAreNotRedeliveredToANewSubscription pins the property a
-// long-running listener depends on.
-//
-// Subscribe starts every subscription with a zero cursor and re-reads the
-// backlog, so what keeps a reconnecting consumer from being handed work it
-// has already done is the acked_at filter — nothing else. A node that runs
-// an agent per message (see docs/templates.md) would otherwise re-run every
-// historical message on each restart, and restarts are routine: the
-// follower reconnects a second after any dropped stream.
-//
-// This lives here rather than in the shared conformance suite on purpose.
-// It is real behaviour of this backend, but whether every
-// messaging.MessagingBackend must guarantee it is a contract question the
-// interface does not currently answer — the webhook backend pushes by HTTP
-// POST rather than serving a pull subscription, so the same words may not
-// mean the same thing there.
 func TestAckedMessagesAreNotRedeliveredToANewSubscription(t *testing.T) {
 	backend, err := New(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -110,14 +89,12 @@ func TestAckedMessagesAreNotRedeliveredToANewSubscription(t *testing.T) {
 		}
 	}
 
-	// A listener handles m1 and acks it, then dies.
 	if err := backend.Ack(ctx, messaging.Ack{
 		MessageID: "m1", ByWorker: "worker-x", Action: "handled", At: time.Now(),
 	}); err != nil {
 		t.Fatalf("Ack: %v", err)
 	}
 
-	// It restarts: a brand-new subscription, cursor back at zero.
 	subCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	ch, err := backend.Subscribe(subCtx, "worker-x")

@@ -1,9 +1,3 @@
-# Media contracts: synthesized video/audio generation from report data,
-# and the interactive virtual-meeting engine. These are delivery
-# contracts — what a generator consumes — not renderer implementations.
-# A deployment without a generation model behind it simply has no media
-# facet; the contract makes that absence explicit.
-
 version: v1alpha1
 kind: MediaContracts
 
@@ -31,10 +25,9 @@ archetypes:
       Narrative autopsy reconstructing a failure chronologically —
       what went wrong when — over visual timelines and diff overlays.
 
-# The generation contract every archetype request conforms to.
 generation_contract:
   pacing:
-    runtime_bounds: [60s, 180s]          # micro-brief .. deep dive
+    runtime_bounds: [60s, 180s]  # micro-brief .. deep dive
     tones: [executive_brief, urgent_incident, casual_debrief]
   storyboard:
     description: >
@@ -47,9 +40,8 @@ generation_contract:
       Avatar appearance, voice parameters, and domain authority per
       speaker. Personas are deployment assets referenced by name.
 
-# Interactive simulation rather than a rendered artifact.
 virtual_meeting:
-  inputs: [report_payload, agenda, domain_context]   # SLAs, history
+  inputs: [report_payload, agenda, domain_context]
   personas:
     description: >
       AI participants with explicit stakeholder lenses (CFO: budget,

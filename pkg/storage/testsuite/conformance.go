@@ -1,7 +1,4 @@
-// Package testsuite provides a backend-agnostic conformance test suite for
-// storage.StorageBackend implementations. Backend packages call
-// RunConformance from their own tests to verify they satisfy the contract
-// documented on storage.StorageBackend.
+// Package testsuite is the conformance suite every storage.StorageBackend implementation runs.
 package testsuite
 
 import (
@@ -16,12 +13,7 @@ import (
 	"github.com/acumen-ai-org/robotdreams/pkg/storage"
 )
 
-// RunConformance runs the storage.StorageBackend conformance suite as
-// subtests of t. factory must return a fresh, independent StorageBackend
-// instance each time it is called — RunConformance calls it once per
-// subtest so that subtests do not observe each other's state. Callers
-// typically implement factory by rooting a new backend at a fresh
-// t.TempDir() (or equivalent) on every call.
+// RunConformance runs the conformance subtests, each against a fresh backend from factory.
 func RunConformance(t *testing.T, factory func() storage.StorageBackend) {
 	t.Helper()
 

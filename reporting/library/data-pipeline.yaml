@@ -1,17 +1,3 @@
-# Report definition: data-pipeline — whether the data platform's
-# tables are there, on time, and correct. Hourly, because that is the
-# cadence the pipelines themselves run at.
-#
-# Deliberately NOT a second performance report: the data teams already
-# produce `performance` and `incident` from the engineering builders,
-# and repeating p95 latency or error rate here would say the same thing
-# twice in different words. This report is about freshness, SLAs and
-# data quality — the three things nobody else measures and the only
-# things anyone asks a data team at 09:00.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: data-pipeline
@@ -29,9 +15,6 @@ scope:
       jobs_run: sum
       jobs_failed: sum
       rows_processed: sum
-      # Lateness takes the worst, not the mean: a warehouse where one
-      # table is four hours stale and forty are fresh is a warehouse
-      # with a four-hour problem, and averaging hides exactly that.
       freshness_lag_minutes: max
       sla_hit_pct: avg
       dq_pass_pct: avg
@@ -42,11 +25,7 @@ data:
   kpis:
     - { name: jobs_run, unit: count, window: 1h }
     - { name: jobs_failed, unit: count, window: 1h }
-    # An hour is the standard freshness promise for the hourly marts;
-    # past it, the morning dashboards are reading yesterday.
     - { name: freshness_lag_minutes, unit: minutes, target: 60, direction: above }
-    # 99% of runs inside their SLA window is the platform's published
-    # commitment to its consumers.
     - { name: sla_hit_pct, unit: percent, target: 99, direction: below }
     - { name: rows_processed, unit: count, window: 1h }
     - { name: dq_pass_pct, unit: percent, target: 99, direction: below }
@@ -59,9 +38,6 @@ data:
     - { type: backfill.started, severity: info }
     - { type: backfill.finished, severity: info }
   tables:
-    # The money panel: which table is late, longest first. This is the
-    # only question a data team is ever asked in the morning, so it is
-    # answered as a ranking rather than as a search.
     - name: lateness_by_dataset
       columns: [dataset, lag_minutes]
     - name: late_datasets
@@ -77,8 +53,6 @@ facets:
     headline: "{{jobs_run}} jobs, {{jobs_failed}} failed, worst lag {{freshness_lag_minutes}}m"
   timeline:
     events: [job.failed, freshness.breached, sla.missed, backfill.started, backfill.finished]
-    # A backfill is a period the warehouse is knowingly inconsistent
-    # in, which is why it belongs on the timeline as a bar.
     spans:
       - { name: backfill, start: backfill.started, end: backfill.finished }
     milestones: [sla.missed]

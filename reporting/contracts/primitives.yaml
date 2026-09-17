@@ -1,17 +1,3 @@
-# Visual primitives: the shared vocabulary of render widgets a facet may
-# hint at. Five families. Each primitive names the data kind it renders
-# (kpi | series | events | spans | table | graph | items) — a consumer
-# may substitute any primitive that renders the same data kind, because
-# the contract is the data, not the widget.
-#
-# Each primitive also names the QUESTION it answers, the way the facets
-# in contracts/facets.yaml do. That is what makes this a vocabulary
-# rather than a widget catalogue: a definition picks the drawing by the
-# question its reader is asking, and a consumer that lacks the widget
-# can substitute another one answering the same question over the same
-# data kind. Enterprise reporting is legible when it uses a small,
-# consistent set of these — see `guidance` at the end of this file.
-
 version: v1alpha1
 kind: PrimitiveVocabulary
 
@@ -160,11 +146,6 @@ families:
 
   - name: planning
     context: intended work
-    # Dependencies are NOT a primitive of their own here: an item's
-    # blocked_by edges are a graph, and `dag` above already answers
-    # "what is the shape of the work?" over one. A second dependency
-    # widget would be variety, not a question. Burndown is not here
-    # either — it renders a series, so it sits with the temporal family.
     primitives:
       - name: board
         data: items
@@ -230,10 +211,6 @@ families:
           Dual-pane comparison highlighting deltas between two
           executions, expected vs. actual, baseline vs. current.
 
-# How the vocabulary is meant to be used. Not validated — a definition
-# cannot be rejected for being ugly — but this is the house style, and
-# a consumer implementing these primitives should implement them this
-# way.
 guidance:
   core_set: >
     Most reports are well served by six: kpi_card, timeseries,

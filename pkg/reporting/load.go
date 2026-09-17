@@ -11,8 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LoadDefinitionFile reads and parses the ReportDefinition at path,
-// applying the same validation as ParseDefinition.
+// LoadDefinitionFile reads and parses one ReportDefinition file with ParseDefinition's validation.
 func LoadDefinitionFile(path string) (*Definition, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -25,28 +24,14 @@ func LoadDefinitionFile(path string) (*Definition, error) {
 	return d, nil
 }
 
-// LoadLibraryDir loads every *.yaml ReportDefinition in dir, in filename
-// order, and validates the set as a whole.
-//
-// Beyond per-file validation it resolves extends chains (a child starts
-// from a deep copy of its parent and any non-zero child field — each
-// top-level field, and each facet slot individually — overrides
-// wholesale), rejects missing extends targets and extends cycles, rejects
-// duplicate definition names, and cross-validates detail drilldown links:
-// every drilldown name must resolve to a definition in the loaded set.
-// All problems across all files are collected and returned together in a
-// single error wrapping ErrInvalidDefinition.
+// LoadLibraryDir loads every *.yaml ReportDefinition in dir, resolves extends, and validates the set as a whole.
 func LoadLibraryDir(dir string) ([]*Definition, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("reporting: load library %q: %w", dir, err)
 	}
 
-	type loaded struct {
-		file string
-		def  *Definition
-	}
-	var files []loaded
+	var files []loadedDefinition
 	var problems []error
 
 	names := make([]string, 0, len(entries))
@@ -72,15 +57,14 @@ func LoadLibraryDir(dir string) ([]*Definition, error) {
 		for _, p := range d.validateCore() {
 			problems = append(problems, fmt.Errorf("%s: %w", name, p))
 		}
-		files = append(files, loaded{file: name, def: &d})
+		files = append(files, loadedDefinition{file: name, def: &d})
 	}
 
-	// Index by definition name; duplicates are errors.
-	byName := make(map[string]*loaded, len(files))
+	byName := make(map[string]*loadedDefinition, len(files))
 	for i := range files {
 		f := &files[i]
 		if f.def.Name == "" {
-			continue // already reported by validateCore
+			continue
 		}
 		if prev, ok := byName[f.def.Name]; ok {
 			problems = append(problems, fmt.Errorf("%s: duplicate definition name %q (first declared in %s)", f.file, f.def.Name, prev.file))
@@ -89,15 +73,14 @@ func LoadLibraryDir(dir string) ([]*Definition, error) {
 		byName[f.def.Name] = f
 	}
 
-	// Resolve extends chains, memoized, with cycle detection.
 	resolved := make(map[string]*Definition, len(files))
 	const (
 		resolving = 1
 		done      = 2
 	)
 	state := make(map[string]int, len(files))
-	var resolve func(f *loaded) (*Definition, error)
-	resolve = func(f *loaded) (*Definition, error) {
+	var resolve func(f *loadedDefinition) (*Definition, error)
+	resolve = func(f *loadedDefinition) (*Definition, error) {
 		name := f.def.Name
 		if d, ok := resolved[name]; ok {
 			return d, nil
@@ -132,7 +115,7 @@ func LoadLibraryDir(dir string) ([]*Definition, error) {
 	for i := range files {
 		f := &files[i]
 		if f.def.Name == "" || byName[f.def.Name] != f {
-			continue // unnamed or duplicate; already reported
+			continue
 		}
 		d, err := resolve(f)
 		if err != nil {
@@ -146,7 +129,21 @@ func LoadLibraryDir(dir string) ([]*Definition, error) {
 		defFiles = append(defFiles, f.file)
 	}
 
-	// Cross-file drilldown links must resolve within the loaded set.
+	problems = append(problems, unresolvedDrilldowns(defs, defFiles, byName)...)
+
+	if len(problems) > 0 {
+		return nil, fmt.Errorf("reporting: load library %q: %w: %w", dir, ErrInvalidDefinition, errors.Join(problems...))
+	}
+	return defs, nil
+}
+
+type loadedDefinition struct {
+	file string
+	def  *Definition
+}
+
+func unresolvedDrilldowns(defs []*Definition, defFiles []string, byName map[string]*loadedDefinition) []error {
+	var problems []error
 	for i, d := range defs {
 		if d.Facets.Detail == nil {
 			continue
@@ -157,18 +154,9 @@ func LoadLibraryDir(dir string) ([]*Definition, error) {
 			}
 		}
 	}
-
-	if len(problems) > 0 {
-		return nil, fmt.Errorf("reporting: load library %q: %w: %w", dir, ErrInvalidDefinition, errors.Join(problems...))
-	}
-	return defs, nil
+	return problems
 }
 
-// mergeExtends applies the inheritance rule: the child starts from a deep
-// copy of the parent, and any non-zero child field overrides wholesale —
-// no per-element merging. "Field" means each top-level Definition field
-// (description, categories, modalities, scope, data), and each facet slot
-// individually: a child facet block replaces the parent's block entirely.
 func mergeExtends(parent, child *Definition) *Definition {
 	out := parent.clone()
 	out.Version = child.Version
@@ -227,8 +215,6 @@ func (d DataContract) isZero() bool {
 	return len(d.KPIs) == 0 && len(d.Series) == 0 && len(d.Events) == 0 && len(d.Tables) == 0
 }
 
-// clone returns a deep copy of the definition, so a child produced by
-// mergeExtends never aliases its parent's slices or maps.
 func (d *Definition) clone() *Definition {
 	out := *d
 	out.Categories = append([]string(nil), d.Categories...)

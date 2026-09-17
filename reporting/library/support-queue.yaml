@@ -1,13 +1,3 @@
-# Report template: support-queue — customer care. The one business
-# report in the fixture that runs around the clock: support follows
-# USER activity, not office hours, so its volume curve is the streaming
-# curve and its weekends are its busiest days. Categorised as activity
-# (the queue is a live pulse) and failures, because most of what
-# arrives here is somebody else's defect reaching a person.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: support-queue
@@ -21,10 +11,6 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # Volumes and the backlog sum. Times, satisfaction, contact rate
-    # and deflection are all per-contact rates: they average. Summing
-    # CSAT across two queues would produce a number above the top of
-    # the scale, which is the tell.
     kpis:
       tickets_received: sum
       tickets_resolved: sum
@@ -42,12 +28,8 @@ data:
     - { name: tickets_received, unit: count, window: 1h }
     - { name: tickets_resolved, unit: count, window: 1h }
     - { name: backlog, unit: count, window: 1h }
-    # An hour is the outer edge of a first response anyone experiences
-    # as support rather than as being ignored.
     - { name: first_response_minutes, unit: minutes, window: 1h, target: 60, direction: above }
     - { name: resolution_hours, unit: hours, window: 24h, target: 24, direction: above }
-    # Four and a half of five. Care operations run 4.2-4.6; below four
-    # the queue is being cleared rather than answered.
     - { name: csat, unit: score, window: 24h, target: 4.5, direction: below }
     - { name: contact_rate_per_1k, unit: count, window: 24h }
     - { name: deflection_pct, unit: percent, window: 24h }
@@ -61,14 +43,8 @@ data:
     - { type: queue.backlog_grew, severity: warn }
     - { type: surge.detected, severity: critical }
   tables:
-    # Queue x hour-of-day. Staffing is the decision this panel exists
-    # to inform, and staffing is a question about hours, not about
-    # totals: a queue that is fine on average can be on fire at 02:00.
     - name: queue_by_hour
       columns: [row, column, value]
-    # Contact -> past self-serve -> handled by an agent -> escalated.
-    # Monotonically non-increasing by construction: each stage is the
-    # subset of the one before it that was not resolved there.
     - name: contact_stages
       columns: [stage, count]
     - name: aging_tickets

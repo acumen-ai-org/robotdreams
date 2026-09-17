@@ -1,13 +1,3 @@
-# Report template: workforce — the people picture. Not hiring (which is
-# a pipeline) and not cost (which is money): this is who is here, who
-# left, and whether the ones who stayed would recommend the place.
-# Categorised as quality — whether the work was right, applied to the
-# organisation itself — and roadmap, because headcount is a plan with a
-# number on it.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: workforce
@@ -21,9 +11,6 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # headcount and its variance to plan are FTE counts, so they sum
-    # and the roll-up reconciles with the org chart beneath it. Every
-    # other field here is a rate about people, and rates average.
     kpis:
       headcount: sum
       headcount_vs_plan: sum
@@ -37,15 +24,9 @@ scope:
 data:
   kpis:
     - { name: headcount, unit: count, window: 7d }
-    # FTE against the approved plan, signed: negative is under plan.
-    # Kept as a count rather than a percentage precisely so it sums.
-    - { name: headcount_vs_plan, unit: count, window: 7d }
-    # Regretted attrition is the only attrition number worth a target:
-    # 6-10% annualised is healthy for a company this size, and past
-    # ten the exit interviews stop being anecdotes.
+    - { name: headcount_vs_plan, unit: count, window: 7d }  # signed FTE; negative is under plan
     - { name: regretted_attrition_pct, unit: percent, window: 365d, target: 8, direction: above }
-    # eNPS runs -100..100. Twenty is respectable, forty is very good.
-    - { name: enps, unit: score, window: 90d, target: 25, direction: below }
+    - { name: enps, unit: score, window: 90d, target: 25, direction: below }  # -100..100
     - { name: absence_pct, unit: percent, window: 30d }
     - { name: internal_mobility_pct, unit: percent, window: 365d }
   series:
@@ -57,12 +38,8 @@ data:
     - { type: leaver.resigned, severity: warn }
     - { type: attrition.spike, severity: critical }
   tables:
-    # The centrepiece. Opening + hires + transfers in - voluntary exits
-    # - involuntary exits = closing, where closing is the org chart's
-    # own number. A headcount bridge that does not land on the real
-    # headcount is the fastest way to lose an audience of one.
     - name: headcount_bridge
-      columns: [step, amount, kind]
+      columns: [step, amount, kind]  # kind: total at the ends, delta between
     - name: attrition_by_reason
       columns: [reason, leavers]
     - name: retention_watchlist

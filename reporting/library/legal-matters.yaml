@@ -1,13 +1,3 @@
-# Report template: legal-matters — counsel throughput. A legal team's
-# week is measured the way any queue is: what came in, what went out,
-# and how long the middle took. Categorised as delivery (a signed
-# contract is shipped work) and decisions, because the matters counsel
-# cannot move are almost always waiting on a business owner rather than
-# on a lawyer.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: legal-matters
@@ -21,10 +11,6 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # Turnaround is a median, and the median of a set of medians is
-    # not the median of the set — but p50 over the contributing
-    # instances is the closest the vocabulary gets, and it is honest
-    # about being a percentile rather than pretending to be a mean.
     kpis:
       contracts_in_flight: sum
       matters_open: sum
@@ -37,9 +23,6 @@ scope:
 data:
   kpis:
     - { name: contracts_in_flight, unit: count, window: 7d }
-    # Standard paper — NDAs, order forms, vendor MSAs on our template
-    # — turns around in a working week. Bespoke negotiation does not,
-    # and is not what this median is for.
     - { name: median_turnaround_days, unit: days, window: 30d, target: 7, direction: above }
     - { name: matters_open, unit: count, window: 7d }
     - { name: matters_closed, unit: count, window: 7d }
@@ -54,14 +37,10 @@ data:
     - { type: escalation.raised, severity: warn }
     - { type: deadline.missed, severity: critical }
   tables:
-    # Intake to signature, so the stage where paper actually sits is
-    # visible rather than inferred from a turnaround average.
     - name: matter_stages
       columns: [stage, count]
     - name: matters_by_type
       columns: [type, open, closed, median_days]
-    # The matters counsel has finished with and the business has not.
-    # This is the section a general counsel forwards to someone else.
     - name: awaiting_business_decision
       columns: [since, matter, counterparty, question, owner]
     - name: open_matters

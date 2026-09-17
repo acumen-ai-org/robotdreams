@@ -2,8 +2,7 @@ package security
 
 import "time"
 
-// Clock abstracts time.Now so TTL/expiry logic can be tested
-// deterministically with a fake clock instead of real wall-clock time.
+// Clock abstracts time.Now so TTL and expiry logic can run against a fake clock.
 type Clock interface {
 	Now() time.Time
 }

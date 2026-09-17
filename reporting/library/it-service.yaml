@@ -1,13 +1,3 @@
-# Report template: it-service — corporate IT. The internal service
-# desk and the systems behind it, reported the way any service is:
-# volume, time to restore, and whether the estate is in the state it is
-# supposed to be in. Categorised as activity and performance rather
-# than delivery: corporate IT does not ship releases, it keeps seven
-# thousand people working.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: it-service
@@ -34,13 +24,7 @@ scope:
 data:
   kpis:
     - { name: tickets, unit: count, window: 24h }
-    # A working day to restore an internal service. Longer than a
-    # production SLO on purpose: nobody pages at 03:00 for a docking
-    # station, and pretending otherwise makes the number a fiction.
     - { name: mttr_hours, unit: hours, window: 24h, target: 8, direction: above }
-    # Patch and configuration compliance across the managed fleet. The
-    # security team reads this number too, which is why 95 is a floor
-    # rather than an aspiration.
     - { name: device_compliance_pct, unit: percent, window: 24h, target: 95, direction: below }
     - { name: seats_licensed, unit: count, window: 24h }
     - { name: seats_used, unit: count, window: 24h }
@@ -57,10 +41,6 @@ data:
   tables:
     - name: tickets_by_service
       columns: [service, tickets, mttr_hours]
-    # The gap between what is paid for and what is used, per
-    # application. Unused seats are the one line in a corporate IT
-    # budget that can be cancelled the same afternoon, which is why
-    # this and not a ticket count is the panel that needs attention.
     - name: licence_gap
       columns: [application, licensed, used, idle_90d, annual_eur]
     - name: service_health

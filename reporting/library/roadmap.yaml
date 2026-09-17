@@ -1,9 +1,3 @@
-# Report template: roadmap — planned work, milestones, schedule drift.
-# Timeline-centric. Copy, rename, and adapt.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: roadmap
@@ -23,15 +17,12 @@ scope:
       slip_days: max
     timeline: merge
     pulse: sample(10)
-    # A department sees its cards; a division sees the busiest columns.
     items: sample(25)
 
 data:
   kpis:
     - { name: milestones_hit, unit: count, window: 30d }
     - { name: milestones_missed, unit: count, window: 30d, target: 0, direction: above }
-    # Plans slip; a plan that claims it will not is not a plan. The
-    # commitment is to keep the slip inside a sprint.
     - { name: slip_days, unit: days, target: 5, direction: above }
   events:
     - { type: milestone.reached, severity: info }
@@ -61,13 +52,7 @@ facets:
       - { title: Upcoming milestones, primitive: datagrid, data: table/upcoming, section: detail }
       - { title: What is next, primitive: roadmap_lanes, data: items, section: next }
     drilldown: [delivery]
-  # The `upcoming` table was a plan all along — due dates, owners and
-  # confidence, rendered as opaque cells. Declaring it as a plan is not new
-  # data; it is the same rows finally saying what they are.
   plan:
-    # The shared flow vocabulary. Risk is not a column — a milestone at
-    # risk is in progress with a due date it is going to miss, and the
-    # due date is what says so.
     states: [proposed, committed, in_progress, done]
     horizons: [now, next, later]
     commitments: [committed, planned, candidate]

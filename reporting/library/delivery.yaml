@@ -1,11 +1,3 @@
-# Report template: delivery — shipped work (deploys, releases,
-# completed handoffs). Copy, rename, and adapt; this is a starting
-# point, not a fixed example. The full facet exercise: summary,
-# timeline, detail, pulse, media, conversation.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: delivery
@@ -29,8 +21,6 @@ scope:
 data:
   kpis:
     - { name: deploys, unit: count, window: 24h }
-    # DORA's elite band is under one change failure in six and under a
-    # day from commit to production; these targets are that, sharpened.
     - { name: failed_deploys, unit: count, window: 24h, target: 0, direction: above }
     - { name: lead_time_minutes, unit: minutes, window: 24h, target: 60, direction: above }
   series:

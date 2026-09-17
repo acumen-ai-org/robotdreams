@@ -1,36 +1,3 @@
-# Report template: brand-reach — what the communications function put
-# out, how far it travelled, and how it landed. `activity` because most
-# of it is a daily volume read, and `quality` because the number that
-# matters is not how many notes were published but how many were picked
-# up and how they were received.
-#
-# One definition covers both the press office and internal comms, which
-# is a judgement call worth stating. They talk to different audiences,
-# but the job has the same shape: publish an item, watch how far it
-# carries, read the reaction. So the fields are named for that shape
-# rather than for either audience —
-#
-#   mentions          external: media mentions of the company
-#                     internal: times the item was referenced or
-#                               discussed across internal channels
-#   share_of_voice_pct  external: share of category coverage
-#                     internal: share of internal channel traffic the
-#                               comms function's own items account for
-#   sentiment_score   0-100 favourability, from media sentiment
-#                     analysis or from pulse response to the item
-#   releases_published  press releases, or all-hands and announcement
-#                     posts — the count of things put out
-#   pickup_rate_pct   external: share of releases an outlet ran
-#                     internal: share of the audience that read it
-#
-# The alternative was two definitions differing only in wording, which
-# would have split the department's roll-up in half for no gain. If a
-# deployment finds the internal reading strained, `extends` is the seam
-# to split on.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: brand-reach
@@ -45,12 +12,8 @@ scope:
     status: worst
     headline: synthesize
     kpis:
-      # Counts of things: mentions observed, items published.
       mentions: sum
       releases_published: sum
-      # Shares and scores. Share of voice in particular is a share of a
-      # fixed denominator — adding two desks' shares would claim the
-      # company owns more of the conversation than exists.
       share_of_voice_pct: avg
       sentiment_score: avg
       pickup_rate_pct: avg
@@ -61,12 +24,8 @@ data:
   kpis:
     - { name: mentions, unit: count, window: 24h }
     - { name: share_of_voice_pct, unit: percent, window: 7d, direction: below }
-    # 0-100 favourability. The comms team commits to holding a floor
-    # rather than to a ceiling, so the target is per desk.
-    - { name: sentiment_score, unit: score, window: 7d, direction: below }
+    - { name: sentiment_score, unit: score, window: 7d, direction: below }  # 0-100
     - { name: releases_published, unit: count, window: 24h }
-    # An item nobody ran did not happen. 45% is the shared floor; the
-    # internal desk, talking to a captive audience, commits to more.
     - { name: pickup_rate_pct, unit: percent, window: 7d, target: 45, direction: below }
   series:
     - { name: mention_rate, unit: per-hour }
@@ -77,22 +36,15 @@ data:
     - { type: comms.sentiment_drop, severity: warn }
     - { type: comms.negative_cycle, severity: critical }
   tables:
-    # The ranked read: which outlets and channels carried it. This is
-    # the panel a comms lead opens first, because reach is never even.
     - name: reach_by_channel
       columns: [channel, mentions, sentiment_score, pickup_rate_pct]
-    # The individual items, so a spike can be traced to the thing that
-    # caused it rather than guessed at.
     - name: top_items
       columns: [item, channel, mentions, sentiment_score, picked_up]
-    # One row per desk for the department roll-up's ranked bar.
     - name: mentions_by_unit
       columns: [unit, mentions]
 
 facets:
   summary:
-    # Volume is not the health signal — a bad week produces plenty of
-    # mentions. Sentiment is.
     status: { from: sentiment_score, warn_at: 55, critical_at: 40, direction: below }
     kpis: [mentions, share_of_voice_pct, sentiment_score, releases_published, pickup_rate_pct]
     sparkline: mention_rate

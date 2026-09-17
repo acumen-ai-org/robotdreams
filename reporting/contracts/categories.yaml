@@ -1,9 +1,3 @@
-# Standard report categories: the shared filtering/scoping concepts
-# every dashboard, timeline, and pulse view offers. A ReportDefinition
-# declares which it covers. Deployments may extend this set, but a
-# report using a non-standard category is invisible to standard filters
-# — that trade-off is the point of a standard.
-
 version: v1alpha1
 kind: ReportCategorySet
 

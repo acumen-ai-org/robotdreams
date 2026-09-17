@@ -1,9 +1,3 @@
-# Consumption modalities: human-facing delivery modes — how report data
-# is ingested with minimal cognitive friction depending on where the
-# reader is. A definition declares which modalities it supports; the
-# consumer picks the one that fits its context. The report doesn't get
-# a vote about where it is read.
-
 version: v1alpha1
 kind: ModalityVocabulary
 

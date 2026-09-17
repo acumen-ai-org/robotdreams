@@ -3,6 +3,7 @@ package localfs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,9 +12,6 @@ import (
 	"github.com/acumen-ai-org/robotdreams/pkg/storage/testsuite"
 )
 
-// TestConformance runs the shared storage.StorageBackend conformance
-// suite against localfs.Backend, each subtest rooted at a fresh temp
-// directory.
 func TestConformance(t *testing.T) {
 	testsuite.RunConformance(t, func() storage.StorageBackend {
 		b, err := New(t.TempDir())
@@ -24,9 +22,6 @@ func TestConformance(t *testing.T) {
 	})
 }
 
-// TestPathTraversalRejected verifies that paths attempting to escape the
-// backend's root (via ".." segments or absolute paths) are rejected and
-// never cause reads or writes outside root.
 func TestPathTraversalRejected(t *testing.T) {
 	root := t.TempDir()
 	b, err := New(root)
@@ -36,7 +31,6 @@ func TestPathTraversalRejected(t *testing.T) {
 	defer b.Close()
 	ctx := context.Background()
 
-	// A sibling directory to root, standing in for "outside the root".
 	outsideDir := t.TempDir()
 	outsideFile := filepath.Join(outsideDir, "secret")
 	if err := os.WriteFile(outsideFile, []byte("pre-existing"), 0o644); err != nil {
@@ -64,7 +58,6 @@ func TestPathTraversalRejected(t *testing.T) {
 		})
 	}
 
-	// The pre-existing outside file must be untouched.
 	data, err := os.ReadFile(outsideFile)
 	if err != nil {
 		t.Fatalf("reading outside file: %v", err)
@@ -73,13 +66,10 @@ func TestPathTraversalRejected(t *testing.T) {
 		t.Fatalf("outside file was modified: got %q", data)
 	}
 
-	// Nothing should have been written outside root either.
 	if _, err := os.Stat(filepath.Join(outsideDir, "..", "etc")); err == nil {
 		t.Fatalf("traversal write escaped root: found unexpected path")
 	}
 
-	// root itself should contain nothing (all attempts were rejected
-	// before any write occurred).
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		t.Fatalf("reading root: %v", err)
@@ -89,8 +79,6 @@ func TestPathTraversalRejected(t *testing.T) {
 	}
 }
 
-// TestAbsolutePathRejected verifies that an absolute object path is
-// rejected rather than silently reinterpreted relative to root.
 func TestAbsolutePathRejected(t *testing.T) {
 	root := t.TempDir()
 	b, err := New(root)
@@ -106,8 +94,6 @@ func TestAbsolutePathRejected(t *testing.T) {
 	}
 }
 
-// TestRevisionsHistory verifies that overwriting an object accumulates
-// revision history, bounded by maxRevisionHistory.
 func TestRevisionsHistory(t *testing.T) {
 	root := t.TempDir()
 	b, err := New(root)
@@ -133,7 +119,6 @@ func TestRevisionsHistory(t *testing.T) {
 	}
 }
 
-// TestHealth verifies Health succeeds against a normal, writable root.
 func TestHealth(t *testing.T) {
 	b, err := New(t.TempDir())
 	if err != nil {
@@ -143,5 +128,44 @@ func TestHealth(t *testing.T) {
 
 	if err := b.Health(context.Background()); err != nil {
 		t.Fatalf("Health: %v", err)
+	}
+}
+
+func TestReservedMetaPathRejected(t *testing.T) {
+	b, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer b.Close()
+	ctx := context.Background()
+
+	for _, p := range []string{metaDirName, metaDirName + "/forged.json", "./" + metaDirName + "/x"} {
+		if _, err := b.Put(ctx, p, bytes.NewReader([]byte("x")), storage.PutOptions{}); err == nil {
+			t.Fatalf("Put %q: want rejection of the reserved %q namespace", p, metaDirName)
+		}
+		if _, _, err := b.Get(ctx, p); err == nil {
+			t.Fatalf("Get %q: want rejection of the reserved %q namespace", p, metaDirName)
+		}
+	}
+}
+
+func TestPathSpellingsShareRevisionHistory(t *testing.T) {
+	b, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer b.Close()
+	ctx := context.Background()
+
+	first, err := b.Put(ctx, "victim.txt", bytes.NewReader([]byte("one")), storage.PutOptions{})
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, err := b.Put(ctx, "./victim.txt", bytes.NewReader([]byte("two")), storage.PutOptions{}); err != nil {
+		t.Fatalf("Put via alternate spelling: %v", err)
+	}
+	_, err = b.Put(ctx, "victim.txt", bytes.NewReader([]byte("three")), storage.PutOptions{IfMatchRevision: first.Revision})
+	if !errors.Is(err, storage.ErrRevisionMismatch) {
+		t.Fatalf("Put with stale IfMatchRevision after a write under another spelling: err = %v, want ErrRevisionMismatch", err)
 	}
 }

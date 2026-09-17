@@ -1,8 +1,4 @@
-// Package reporting is the contracts library for the reporting subsystem:
-// it parses YAML ReportDefinitions, validates them against the shared
-// vocabulary (reporting/contracts/*.yaml baked in as Go constants), models
-// the report instances nodes submit, and aggregates instances across
-// organizational scopes.
+// Package reporting parses and validates ReportDefinitions, models report instances, and aggregates them across scopes.
 package reporting
 
 import (
@@ -16,31 +12,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DefinitionVersion and DefinitionKind are the only accepted values for a
-// ReportDefinition document's version and kind fields.
+// DefinitionVersion and DefinitionKind are the only accepted version and kind of a ReportDefinition document.
 const (
 	DefinitionVersion = "v1alpha1"
 	DefinitionKind    = "ReportDefinition"
 )
 
-// Statuses, ordered worst-last: aggregation's "worst" policy picks the
-// highest-ranked status present.
+// StatusOK, StatusWarn and StatusCritical are the statuses, ordered worst-last.
 const (
 	StatusOK       = "ok"
 	StatusWarn     = "warn"
 	StatusCritical = "critical"
 )
 
-// Event severities.
+// SeverityInfo, SeverityWarn and SeverityCritical are the event severities, mildest first.
 const (
 	SeverityInfo     = "info"
 	SeverityWarn     = "warn"
 	SeverityCritical = "critical"
 )
 
-// Vocabulary sets, mirroring reporting/contracts/*.yaml. Deployments may
-// extend the YAML contracts, but this library validates against the
-// standard vocabulary only.
 var (
 	// Categories mirrors contracts/categories.yaml.
 	Categories = []string{
@@ -61,76 +52,44 @@ var (
 		"board", "roadmap_lanes", "checklist",
 		"flamegraph", "scatter", "datagrid", "logbuffer", "diff",
 	}
-	// PanelSections mirrors contracts/facets.yaml: the reading order a
-	// detail page follows — what happened, why, what needs attention,
-	// and the numbers behind it. A panel need not name one; those render
-	// in declaration order ahead of the sectioned ones.
+	// PanelSections mirrors contracts/facets.yaml: the reading order of a detail page.
 	PanelSections = []string{"overview", "performance", "drivers", "exceptions", "next", "detail"}
-	// Directions is the shared "which way is bad" vocabulary, used by
-	// both a summary status rule and a KPI target.
+	// Directions is the shared "which way is bad" vocabulary of status rules and KPI targets.
 	Directions = []string{"above", "below"}
 	// Modalities mirrors contracts/modalities.yaml.
 	Modalities = []string{"narrative", "glance", "delta", "spatial", "storyboard", "board", "conversational"}
-	// Stances mirrors contracts/stances.yaml: the footing a report is
-	// read from — what its numbers are measured against. A threshold
-	// (operational), a plan (strategic), or nothing at all, because the
-	// record is the answer (diagnostic).
+	// Stances mirrors contracts/stances.yaml: the footing a report is read from.
 	Stances = []string{"operational", "strategic", "diagnostic"}
-	// SectionStances inverts contracts/stances.yaml's per-stance section
-	// lists: which stances each panel section serves.
-	//
-	// This is what makes the axis work across the whole library without a
-	// per-panel declaration. The reading order in facets.yaml was already
-	// a stance projection — "actual against target" is strategic by
-	// definition, "items requiring a decision" is operational, "the
-	// searchable matrix underneath" is diagnostic — so a panel that named
-	// a section has already said most of it.
+	// SectionStances maps each panel section to the stances it serves, per contracts/stances.yaml.
 	SectionStances = map[string][]string{
 		"overview":    {"operational", "strategic", "diagnostic"},
 		"performance": {"strategic"},
 		"drivers":     {"strategic", "operational"},
 		"exceptions":  {"operational"},
-		// `next` is the one section about the future, and steering is the
-		// only footing from which a plan is a judgement rather than a list.
-		"next":   {"strategic"},
-		"detail": {"diagnostic"},
+		"next":        {"strategic"},
+		"detail":      {"diagnostic"},
 	}
 	// MediaArchetypes mirrors contracts/media.yaml.
 	MediaArchetypes = []string{"anchor", "podcast", "screencast", "recap"}
-	// WorkLevels mirrors docs/vision/hierarchy.md's levels, used here as a
-	// flat LABEL vocabulary for Item.Level. Naming the levels is not
-	// modelling them: nothing in this library relates a "task" to the
-	// "activity" above it, and no field could — hierarchy.md resolved that
-	// the Go build represents no work hierarchy, and this does not reopen
-	// it.
+	// WorkLevels is the flat label vocabulary for Item.Level, from docs/vision/hierarchy.md.
 	WorkLevels = []string{"goal", "initiative", "workstream", "activity", "task", "subtask"}
 	// ItemPolicies are the aggregation policies legal for a plan's items.
-	// Every one of them either merges or counts; none of them averages,
-	// because there is no arithmetic to do on a card.
 	ItemPolicies = []string{"merge", "sample", "top", "count"}
-	// kpiPolicies are the policies that reduce a list of scalars; the
-	// ones a KPI may declare for its time fold.
-	kpiPolicies = []string{"sum", "avg", "min", "max", "p50", "p95", "latest", "count"}
-	// PolicyNames mirrors contracts/aggregations.yaml; sample and top take
-	// a positive integer parameter, e.g. "sample(50)".
+
+	timeKPIPolicies = []string{"sum", "avg", "min", "max", "p50", "p95", "latest", "count"}
+	// PolicyNames mirrors contracts/aggregations.yaml; sample and top take a positive integer parameter.
 	PolicyNames = []string{
 		"worst", "sum", "avg", "min", "max", "p50", "p95",
 		"latest", "count", "merge", "sample", "top", "synthesize",
 	}
 )
 
-// groundingKinds are the data kinds a conversation facet may expose.
 var groundingKinds = []string{"kpis", "series", "events", "tables"}
 
-// ErrInvalidDefinition is returned by ParseDefinition, LoadDefinitionFile
-// and LoadLibraryDir when a definition fails validation. The returned error
-// wraps the individual problems (joined with errors.Join), so every issue
-// is reported at once rather than only the first.
+// ErrInvalidDefinition wraps every problem found when a definition fails validation.
 var ErrInvalidDefinition = errors.New("reporting: invalid report definition")
 
-// Definition is a parsed ReportDefinition: what a report produces (its data
-// contract) and which facets it exposes, plus where in the organizational
-// scope tree it attaches and how instances roll up.
+// Definition is a parsed ReportDefinition: its data contract, facets, scope attachment and aggregation policies.
 type Definition struct {
 	Version     string   `yaml:"version" json:"version"`
 	Kind        string   `yaml:"kind" json:"kind"`
@@ -139,97 +98,70 @@ type Definition struct {
 	Extends     string   `yaml:"extends,omitempty" json:"extends,omitempty"`
 	Categories  []string `yaml:"categories" json:"categories"`
 	Modalities  []string `yaml:"modalities" json:"modalities"`
-	// Stances the report can be read from. Optional: empty means every
-	// stance, which is the honest answer for a report that does not care
-	// how it is judged.
+
 	Stances []string     `yaml:"stances,omitempty" json:"stances,omitempty"`
 	Scope   ScopeSpec    `yaml:"scope" json:"scope"`
 	Data    DataContract `yaml:"data" json:"data"`
 	Facets  Facets       `yaml:"facets" json:"facets"`
 }
 
-// ScopeSpec declares which scope levels a definition attaches to and how
-// its instances aggregate upward.
+// ScopeSpec declares which scope levels a definition attaches to and how its instances aggregate upward.
 type ScopeSpec struct {
 	Attach      []string        `yaml:"attach" json:"attach"`
 	Aggregation AggregationSpec `yaml:"aggregation" json:"aggregation"`
 }
 
-// AggregationSpec names the aggregation policy per rolled-up field. Values
-// are policy strings as accepted by ParsePolicy.
+// AggregationSpec names the aggregation policy per rolled-up field.
 type AggregationSpec struct {
 	Status   string            `yaml:"status" json:"status"`
 	Headline string            `yaml:"headline" json:"headline"`
 	KPIs     map[string]string `yaml:"kpis" json:"kpis"`
 	Timeline string            `yaml:"timeline" json:"timeline"`
 	Pulse    string            `yaml:"pulse" json:"pulse"`
-	// Items is how N boards below a scope become one board at it. Legal
-	// values are ItemPolicies; see contracts/aggregations.yaml for what
-	// each does to a plan and for the keep-order a bounded board drops by.
+
 	Items string `yaml:"items" json:"items"`
-	// Time is how ONE scope path's instances fold over a period before
-	// the scope roll-up above applies — the stage a reader asks for with
-	// `period=week`. Absent, every field defaults to `latest`, which is
-	// today's newest-per-path rule and therefore changes nothing for a
-	// definition that never declares it.
+
 	Time *TimeAggregationSpec `yaml:"time,omitempty" json:"time,omitempty"`
 }
 
-// TimeAggregationSpec names the policy per field for folding one scope
-// path's instances across a period into one synthetic instance. It is
-// a separate spec from the scope policies because the two questions
-// differ: a counter like tokens_in SUMS over a week but also sums across
-// sites, whereas a gauge like active_nodes sums across sites but should
-// read `latest` (or `max`) over a week — adding Monday's node count to
-// Tuesday's is not a number anyone asked for.
-//
-// Defaults: Status `worst` (a week with one critical day was a critical
-// week), Headline `latest` (prose cannot be recomputed, only chosen; the
-// most recent sentence stands for the period), KPIs `latest` per KPI.
-// Values are policy strings as accepted by ParsePolicy; status accepts
-// worst|latest, headline latest|top(n)|synthesize, kpis the scalar
-// policies.
+// TimeAggregationSpec names the policy per field for folding one scope path's instances over a period.
 type TimeAggregationSpec struct {
 	Status   string            `yaml:"status,omitempty" json:"status,omitempty"`
 	Headline string            `yaml:"headline,omitempty" json:"headline,omitempty"`
 	KPIs     map[string]string `yaml:"kpis,omitempty" json:"kpis,omitempty"`
 }
 
-// TimeStatusPolicy is the effective time-fold status policy: the declared
-// one when it parses, else worst.
+// TimeStatusPolicy is the effective time-fold status policy.
 func (a AggregationSpec) TimeStatusPolicy() Policy {
 	if a.Time != nil {
 		if p, err := ParsePolicy(a.Time.Status); err == nil {
 			return p
 		}
 	}
-	return Policy{Name: "worst"}
+	return Policy{Name: defaultStatusPolicy}
 }
 
-// TimeHeadlinePolicy is the effective time-fold headline policy: the
-// declared one when it parses, else latest.
+// TimeHeadlinePolicy is the effective time-fold headline policy.
 func (a AggregationSpec) TimeHeadlinePolicy() Policy {
 	if a.Time != nil {
 		if p, err := ParsePolicy(a.Time.Headline); err == nil {
 			return p
 		}
 	}
-	return Policy{Name: "latest"}
+	return Policy{Name: defaultHeadlinePolicy}
 }
 
-// TimeKPIPolicy is the effective time-fold policy for one KPI: the
-// declared one when it parses, else latest.
+// TimeKPIPolicy is the effective time-fold policy for one KPI.
 func (a AggregationSpec) TimeKPIPolicy(name string) Policy {
 	if a.Time != nil {
 		if p, err := ParsePolicy(a.Time.KPIs[name]); err == nil {
 			return p
 		}
 	}
-	return Policy{Name: "latest"}
+	return Policy{Name: defaultKPIPolicy}
 }
 
-// DataContract declares the data a report instance may carry. Facet
-// references resolve against these names.
+// DataContract declares the data a report instance may carry.
 type DataContract struct {
 	KPIs   []KPISpec    `yaml:"kpis" json:"kpis"`
 	Series []SeriesSpec `yaml:"series" json:"series"`
@@ -238,19 +170,6 @@ type DataContract struct {
 }
 
 // KPISpec declares one named scalar metric.
-//
-// Target and Direction are what turn the metric into an answer rather
-// than a number: contracts/primitives.yaml requires a kpi_card to show
-// "the target and the variance between them", and without a declared
-// target there is nothing to compare against. Both are optional — a
-// metric that has no meaningful target (log lines, tokens) simply omits
-// them and renders exactly as it did before.
-//
-// Target here is the definition-level default; an instance may override
-// it per scope via Instance.Targets, because one squad's latency budget
-// is not another's. Direction says which side of the target is bad, with
-// the same meaning as StatusRule.Direction: "above" means higher is
-// worse, "below" means lower is worse.
 type KPISpec struct {
 	Name      string   `yaml:"name" json:"name"`
 	Unit      string   `yaml:"unit" json:"unit"`
@@ -277,8 +196,7 @@ type TableSpec struct {
 	Columns []string `yaml:"columns" json:"columns"`
 }
 
-// Facets is the set of capability interfaces a definition exposes. A nil
-// facet is simply not exposed.
+// Facets is the set of capability interfaces a definition exposes.
 type Facets struct {
 	Summary      *SummaryFacet      `yaml:"summary" json:"summary,omitempty"`
 	Timeline     *TimelineFacet     `yaml:"timeline" json:"timeline,omitempty"`
@@ -289,8 +207,7 @@ type Facets struct {
 	Conversation *ConversationFacet `yaml:"conversation" json:"conversation,omitempty"`
 }
 
-// SummaryFacet answers "how are you doing?": a status rule, up to a few
-// KPIs, an optional sparkline series and a one-line headline template.
+// SummaryFacet answers "how are you doing?": a status rule, a few KPIs, a sparkline and a headline template.
 type SummaryFacet struct {
 	Status    *StatusRule `yaml:"status" json:"status,omitempty"`
 	KPIs      []string    `yaml:"kpis" json:"kpis"`
@@ -298,8 +215,7 @@ type SummaryFacet struct {
 	Headline  string      `yaml:"headline" json:"headline,omitempty"`
 }
 
-// StatusRule derives a status from one KPI against thresholds. Direction
-// "above" means higher is worse; "below" means lower is worse.
+// StatusRule derives a status from one KPI against thresholds.
 type StatusRule struct {
 	From       string  `yaml:"from" json:"from"`
 	WarnAt     float64 `yaml:"warn_at" json:"warn_at"`
@@ -321,34 +237,24 @@ type SpanSpec struct {
 	End   string `yaml:"end" json:"end"`
 }
 
-// DetailFacet answers "show me everything": ordered panels plus typed
-// drilldown links to other report definitions.
+// DetailFacet answers "show me everything": ordered panels plus drilldown links to other definitions.
 type DetailFacet struct {
 	Panels    []PanelSpec `yaml:"panels" json:"panels"`
 	Drilldown []string    `yaml:"drilldown" json:"drilldown,omitempty"`
 }
 
-// PanelSpec binds a visual primitive to a data reference of the form
-// "series/<name>", "table/<name>", "spans/<span-name>", "kpi/<name>" or the
-// literal "events".
+// PanelSpec binds a visual primitive to a data reference such as "series/<name>", "kpi/<name>", "events" or "items".
 type PanelSpec struct {
 	Title     string `yaml:"title" json:"title"`
 	Primitive string `yaml:"primitive" json:"primitive"`
 	Data      string `yaml:"data" json:"data"`
-	// Section places the panel in the detail page's reading order (see
-	// PanelSections). Optional: a definition that names no sections
-	// renders as a flat ordered list, exactly as before.
+
 	Section string `yaml:"section,omitempty" json:"section,omitempty"`
-	// Stance overrides the stance affinity its section implies. Needed
-	// rarely and on purpose: an at-risk strategic bet legitimately sits
-	// in `exceptions`, which is otherwise an operational section. Do not
-	// declare a stance the section already implies.
+
 	Stance string `yaml:"stance,omitempty" json:"stance,omitempty"`
 }
 
-// Stances returns the stances this panel serves: its own if it declared
-// one, its section's affinity otherwise, and every stance if it declared
-// neither.
+// Stances returns the stances this panel serves: its own, else its section's, else every stance.
 func (p PanelSpec) Stances() []string {
 	if p.Stance != "" {
 		return []string{p.Stance}
@@ -359,59 +265,30 @@ func (p PanelSpec) Stances() []string {
 	return append([]string(nil), Stances...)
 }
 
-// PlanFacet answers "what are we going to do?": the declared board a
-// producer publishes items onto.
-//
-// States is the spine and the only required field. THE DECLARED ORDER IS
-// THE SEMANTICS — left to right is progress, the last state is terminal —
-// and that is what lets the control plane roll a board up (order the
-// columns, count them, drop finished work first when bounding) without
-// knowing what any state means. A board whose columns are a set rather
-// than a sequence could only be aggregated by the report that wrote it,
-// which is the leak the scope contract exists to prevent.
+// PlanFacet answers "what are we going to do?": the board a producer publishes items onto, states in progress order.
 type PlanFacet struct {
 	States []string `yaml:"states" json:"states"`
 	Lanes  []string `yaml:"lanes,omitempty" json:"lanes,omitempty"`
-	// Horizons are declared nearest-first — now/next/later, or the
-	// quarters in order. Same rule as States.
+
 	Horizons []string `yaml:"horizons,omitempty" json:"horizons,omitempty"`
-	// Commitments are declared STRONGEST-FIRST. The order is load-bearing:
-	// it is the ranking a bounded universe-level board drops cards by.
+
 	Commitments []string `yaml:"commitments,omitempty" json:"commitments,omitempty"`
-	// Levels bounds which of WorkLevels this board publishes. Declaring it
-	// is how a delivery board says "we publish tasks, not goals", and how
-	// a portfolio says the opposite.
+
 	Levels []string `yaml:"levels,omitempty" json:"levels,omitempty"`
-	// WIPLimits caps occupancy per state. A board that cannot state its
-	// limit cannot show that it is exceeded, which is most of what a board
-	// is read for. A state with no entry has no limit — which is not the
-	// same as a limit of zero.
+
 	WIPLimits map[string]int `yaml:"wip_limits,omitempty" json:"wip_limits,omitempty"`
-	// SizeUnit says what Item.Size counts: points, days, eur. Declared
-	// once here rather than per item, the same convention as a KPI's unit.
+
 	SizeUnit string        `yaml:"size_unit,omitempty" json:"size_unit,omitempty"`
 	Baseline *PlanBaseline `yaml:"baseline,omitempty" json:"baseline,omitempty"`
 }
 
-// PlanBaseline names what the plan is measured against, which is the whole
-// content of the strategic stance ("measured against a plan") seen from the
-// other side. Ref uses the panel data grammar, restricted to kpi/<name> or
-// series/<name>: the committed number, or the committed curve a burndown is
-// drawn against.
-//
-// It points into the data contract rather than carrying a value, because a
-// baseline is per-scope — one squad's commitment is not another's — and the
-// data contract is already where per-scope values live. Two fields rather
-// than one because a bare string is either an unresolvable label, useless to
-// a chart, or a ref with no display name, which a chart cannot label.
+// PlanBaseline names what the plan is measured against: a kpi/<name> or series/<name> ref in the data contract.
 type PlanBaseline struct {
 	Name string `yaml:"name" json:"name"`
 	Ref  string `yaml:"ref" json:"ref"`
 }
 
-// StateRank returns the declared index of a state, or -1 when the state is
-// not one this plan declares. Progress order, and the only thing about two
-// different plans that can be compared.
+// StateRank returns the declared index of a state, or -1 when the state is not one this plan declares.
 func (p *PlanFacet) StateRank(state string) int {
 	if p == nil {
 		return -1
@@ -424,9 +301,7 @@ func (p *PlanFacet) StateRank(state string) int {
 	return -1
 }
 
-// Terminal reports whether state is this plan's last declared state — done,
-// by declaration order rather than by a magic name, so a board whose final
-// column is "shipped" or "archived" needs no special case.
+// Terminal reports whether state is this plan's last declared state.
 func (p *PlanFacet) Terminal(state string) bool {
 	if p == nil || len(p.States) == 0 {
 		return false
@@ -451,15 +326,9 @@ type ConversationFacet struct {
 	Prompts   []string `yaml:"prompts" json:"prompts,omitempty"`
 }
 
-// facetOrder is the canonical facet presentation order. `plan` is appended
-// rather than slotted next to `timeline` (its forward-looking twin) on
-// purpose: this order is presentational, and appending leaves the prefix
-// every existing consumer and test already reads byte-identical.
 var facetOrder = []string{"summary", "detail", "timeline", "pulse", "media", "conversation", "plan"}
 
-// StanceNames returns the stances this report can be read from, in
-// canonical order — every stance when the definition declares none,
-// because a report that does not say is readable from any footing.
+// StanceNames returns the stances this report can be read from, in canonical order; every stance when it declares none.
 func (d *Definition) StanceNames() []string {
 	if len(d.Stances) == 0 {
 		return append([]string(nil), Stances...)
@@ -473,12 +342,7 @@ func (d *Definition) StanceNames() []string {
 	return out
 }
 
-// ServesStance reports whether this report can be read from a stance. A
-// definition declaring none serves all of them — note this is the
-// OPPOSITE of the category rule, where an absent category excludes the
-// report from that filter. A category is a claim about subject matter
-// and its absence means "not about that"; a stance is a claim about how
-// the numbers may be judged, and its absence means "no opinion".
+// ServesStance reports whether this report can be read from a stance.
 func (d *Definition) ServesStance(stance string) bool {
 	if stance == "" || len(d.Stances) == 0 {
 		return true
@@ -486,8 +350,7 @@ func (d *Definition) ServesStance(stance string) bool {
 	return contains(d.Stances, stance)
 }
 
-// FacetNames returns which facets the definition exposes, in canonical
-// order (summary, detail, timeline, pulse, media, conversation, plan).
+// FacetNames returns which facets the definition exposes, in canonical order.
 func (d *Definition) FacetNames() []string {
 	present := map[string]bool{
 		"summary":      d.Facets.Summary != nil,
@@ -513,16 +376,6 @@ var (
 )
 
 // ParseDefinition parses and validates a YAML ReportDefinition document.
-//
-// Validation is exhaustive rather than fail-fast: every problem found is
-// collected and returned together in a single error wrapping
-// ErrInvalidDefinition, with indexed messages (facets.detail.panels[2]: ...)
-// so an operator can find the offending line in one pass.
-//
-// A definition that declares extends is only structurally validated here:
-// its facet references may point at data inherited from the parent, so
-// reference resolution is deferred to LoadLibraryDir, which resolves the
-// extends chain first.
 func ParseDefinition(data []byte) (*Definition, error) {
 	var d Definition
 	if err := yaml.Unmarshal(data, &d); err != nil {
@@ -538,9 +391,6 @@ func ParseDefinition(data []byte) (*Definition, error) {
 	return &d, nil
 }
 
-// validateCore checks everything that does not depend on the (possibly
-// inherited) data contract: exact version/kind, the name pattern, and that
-// every vocabulary-typed value is in its vocabulary.
 func (d *Definition) validateCore() []error {
 	var problems []error
 
@@ -577,7 +427,6 @@ func (d *Definition) validateCore() []error {
 		}
 	}
 
-	// Aggregation policy strings must parse.
 	checkPolicy := func(field, s string) {
 		if s == "" {
 			return
@@ -605,8 +454,8 @@ func (d *Definition) validateCore() []error {
 		for _, name := range sortedKeys(tm.KPIs) {
 			field := fmt.Sprintf("scope.aggregation.time.kpis[%s]", name)
 			checkPolicy(field, tm.KPIs[name])
-			if p, err := ParsePolicy(tm.KPIs[name]); err == nil && !contains(kpiPolicies, p.Name) {
-				problems = append(problems, fmt.Errorf("%s: policy %q does not apply to kpis, want one of %s", field, p.Name, strings.Join(kpiPolicies, "|")))
+			if p, err := ParsePolicy(tm.KPIs[name]); err == nil && !contains(timeKPIPolicies, p.Name) {
+				problems = append(problems, fmt.Errorf("%s: policy %q does not apply to kpis, want one of %s", field, p.Name, strings.Join(timeKPIPolicies, "|")))
 			}
 		}
 	}
@@ -621,9 +470,6 @@ func (d *Definition) validateCore() []error {
 		}
 	}
 
-	// The plan facet's vocabularies. Each is an ORDERED list, so a repeat
-	// is not a harmless duplicate — it makes the order ambiguous, and the
-	// order is the entire basis on which a board can be rolled up.
 	if pf := d.Facets.Plan; pf != nil {
 		if len(pf.States) == 0 {
 			problems = append(problems, errors.New("facets.plan.states: empty — a board with no columns declares no plan"))
@@ -664,7 +510,6 @@ func (d *Definition) validateCore() []error {
 		}
 	}
 
-	// Data contract: names present and unique, severities in vocabulary.
 	seen := map[string]bool{}
 	for i, k := range d.Data.KPIs {
 		if k.Name == "" {
@@ -711,7 +556,6 @@ func (d *Definition) validateCore() []error {
 		seen[t.Name] = true
 	}
 
-	// Facet-local vocabulary checks.
 	if s := d.Facets.Summary; s != nil && s.Status != nil {
 		if dir := s.Status.Direction; !contains(Directions, dir) {
 			problems = append(problems, fmt.Errorf("facets.summary.status.direction: %q not one of above|below", dir))
@@ -753,9 +597,6 @@ func (d *Definition) validateCore() []error {
 	return problems
 }
 
-// validateRefs checks every facet reference against the data contract. For
-// a definition using extends this runs only after inheritance has been
-// resolved, so inherited data participates.
 func (d *Definition) validateRefs() []error {
 	var problems []error
 
@@ -854,10 +695,6 @@ func (d *Definition) validateRefs() []error {
 		}
 	}
 
-	// A baseline points into the data contract rather than carrying a
-	// value, so it resolves like any other ref — but only against the two
-	// kinds a plan can be measured against: the committed number, or the
-	// committed curve.
 	if pf := d.Facets.Plan; pf != nil && pf.Baseline != nil {
 		kind, name, ok := strings.Cut(pf.Baseline.Ref, "/")
 		switch {
@@ -875,8 +712,6 @@ func (d *Definition) validateRefs() []error {
 	return problems
 }
 
-// validatePanelData resolves one panel data reference against the data
-// contract and the timeline facet's declared spans.
 func validatePanelData(ref string, kpis, series, tables, spans map[string]bool, hasEvents, hasPlan bool) error {
 	const grammar = "want series/<name>, table/<name>, spans/<name>, kpi/<name>, events, or items"
 	if ref == "events" {
@@ -918,8 +753,6 @@ func validatePanelData(ref string, kpis, series, tables, spans map[string]bool, 
 	return nil
 }
 
-// sortedIntKeys returns a map's keys in sorted order, so validation problems
-// over wip_limits are reported in a stable sequence.
 func sortedIntKeys(m map[string]int) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -929,7 +762,6 @@ func sortedIntKeys(m map[string]int) []string {
 	return keys
 }
 
-// validateRateLimit checks the "N/min" producer-side bound format.
 func validateRateLimit(s string) error {
 	count, unit, ok := strings.Cut(s, "/")
 	if !ok {
@@ -945,8 +777,6 @@ func validateRateLimit(s string) error {
 	return nil
 }
 
-// headlinePlaceholders extracts the {{name}} placeholders in a headline
-// template, in order of appearance.
 func headlinePlaceholders(tmpl string) []string {
 	var names []string
 	for _, m := range headlinePlaceholderRE.FindAllStringSubmatch(tmpl, -1) {

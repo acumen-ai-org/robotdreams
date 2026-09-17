@@ -1,18 +1,3 @@
-# Report template: backlog — work that has arrived but has not been
-# planned. The plan before it is a plan.
-#
-# The distinction from `task-board` is arrival vs. flow. A board answers
-# "is what we chose moving?"; a backlog answers "how much did we not
-# choose, and how long has it been waiting?" The number that matters here
-# is age, not throughput: a backlog whose arrival and triage rates match
-# can still be failing everyone in it.
-#
-# Categorised roadmap AND decisions, because triage is a decision and the
-# things nobody triages are the ones that become escalations.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: backlog
@@ -26,9 +11,6 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # Counts sum. Oldest takes a max rather than an average, and that is
-    # the whole point: one item waiting ninety days is a fact about the
-    # queue that an average over two hundred fresh ones would hide.
     kpis:
       items_waiting: sum
       items_arrived: sum
@@ -64,11 +46,6 @@ facets:
     sparkline: waiting_trend
     headline: "{{items_waiting}} waiting, {{items_arrived}} arrived this week, oldest {{oldest_days}}d"
   plan:
-    # Three states and no work in them: everything here is either waiting
-    # to be looked at or has just left. Committed is terminal because the
-    # item's life continues on somebody's board, not on this one. The
-    # words come from the library's shared flow vocabulary, with triaged
-    # as the intake step only a backlog needs.
     states: [proposed, triaged, committed]
     lanes: [request, defect, question, risk]
     commitments: [committed, planned, candidate]

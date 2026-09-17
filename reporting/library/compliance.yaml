@@ -1,14 +1,3 @@
-# Report template: compliance — privacy and regulatory obligation.
-# Categorised as failures (a failed control and a missed statutory
-# deadline are faults, not opinions) and quality (whether the work was
-# done right, evidenced rather than asserted). Deliberately separate
-# from legal-matters: counsel measures throughput, compliance measures
-# obligation, and the two have different deadlines and different
-# regulators.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: compliance
@@ -22,9 +11,6 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # Backlogs, counts of tested controls, open findings and upcoming
-    # deadlines are all workloads: they sum. The two percentages are
-    # attainment rates against a population and average.
     kpis:
       dsar_backlog: sum
       controls_tested: sum
@@ -38,10 +24,6 @@ scope:
 data:
   kpis:
     - { name: dsar_backlog, unit: count, window: 7d }
-    # A subject access request has a statutory one-month deadline,
-    # extendable to three for complex requests. The target is therefore
-    # 100 and nothing else; the interesting question is how far below
-    # it the team actually runs, which in practice is 94-99.
     - { name: dsar_sla_pct, unit: percent, window: 30d, target: 100, direction: below }
     - { name: controls_tested, unit: count, window: 30d }
     - { name: controls_passed_pct, unit: percent, window: 30d, target: 95, direction: below }
@@ -58,15 +40,8 @@ data:
     - { type: deadline.approaching, severity: warn }
     - { type: breach.reportable, severity: critical }
   tables:
-    # Regulation x status. Colour encodes how bad the cell is, never
-    # which regulation it belongs to — the whole point of the grid is
-    # that a reader's eye lands on the overdue column without being
-    # told where to look.
     - name: regulation_status
       columns: [row, column, value]
-    # Received -> identity verified -> data gathered -> responded ->
-    # closed. Where a DSAR stalls is almost always identity, and a
-    # backlog number alone never says that.
     - name: dsar_stages
       columns: [stage, count]
     - name: findings_open

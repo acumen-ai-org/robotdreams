@@ -6,24 +6,25 @@ import (
 	"strings"
 )
 
-// Policy is a parsed aggregation policy. N carries the parameter for the
-// parameterized policies sample(n) and top(n); it is 0 for every other
-// policy.
+// Policy is a parsed aggregation policy.
 type Policy struct {
 	Name string
 	N    int
 }
 
-// bare policies take no parameter.
+const (
+	defaultStatusPolicy   = "worst"
+	defaultHeadlinePolicy = "latest"
+	defaultKPIPolicy      = "latest"
+	defaultItemsPolicy    = "merge"
+)
+
 var barePolicies = []string{
 	"worst", "sum", "avg", "min", "max", "p50", "p95",
 	"latest", "count", "merge", "synthesize",
 }
 
-// ParsePolicy parses an aggregation policy string: either a bare name from
-// the policy vocabulary (worst, sum, avg, min, max, p50, p95, latest,
-// count, merge, synthesize) or a parameterized form sample(n) / top(n)
-// with a positive integer n.
+// ParsePolicy parses a bare policy name or the parameterized forms sample(n) and top(n).
 func ParsePolicy(s string) (Policy, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
