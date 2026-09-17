@@ -1,0 +1,40 @@
+# Robot Dreams environment template: external (bring-your-own runtime).
+#
+# Copy and adapt. The `external` adapter provisions nothing: the node —
+# a laptop session, a CI runner, anything — brings its own runtime, and
+# the control plane only verifies and records that the environment's
+# claims hold. The document is the declared truth about the node, not a
+# provisioning order.
+#
+# This is the smallest useful environment: it exists so that "what does
+# this node have access to, and was that on purpose?" has an answer
+# even for a single agent on a laptop.
+#
+# See docs/vision/environment.md for the full design, and
+# environment-k8s.yaml for a provisioned environment with all three
+# branches filled in.
+#
+# Register with:
+#   dream env apply <your-copy>.yaml
+# Attach a worker to it:
+#   dream worker connect --server <id> --environment laptop-dev
+
+version: v1alpha1
+kind: AgentEnvironment
+name: laptop-dev # rename: this is how workers reference it
+
+workspace:
+  git:
+    - repo: https://github.com/acumen-ai-org/robotdreams # your repo
+      ref: main
+      path: ~/git/robotdreams # verified, not created
+
+capabilities:
+  - use: shell
+  - use: github
+    with:
+      repos: [acumen-ai-org/robotdreams]
+      permissions: [contents:write, pull_requests:write]
+
+runtime:
+  adapter: external
