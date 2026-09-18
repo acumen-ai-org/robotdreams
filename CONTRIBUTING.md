@@ -75,6 +75,8 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/):
   `api`, `cli`, `identity`, `orgchart`, `reporting`, `scheduling`,
   `updates`, `selfupdate`, `simulation`, `dashboard`, `ui`, `docs`, `deps`.
   Leave it out when a change has no natural area.
+- The pull request title follows the same format: a squash merge uses it
+  as the commit subject on `main`, and release-please reads that.
 - Every commit in a pull request is checked by commitlint in CI
   (`commitlint.config.mjs`); `feat`/`fix` subjects become CHANGELOG lines,
   so write them for a reader of the changelog.
