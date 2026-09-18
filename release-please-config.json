@@ -7,7 +7,14 @@
   "changelog-path": "CHANGELOG.md",
   "packages": {
     ".": {
-      "package-name": "robotdreams"
+      "package-name": "robotdreams",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "npm/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }
