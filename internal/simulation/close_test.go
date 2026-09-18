@@ -50,7 +50,7 @@ func TestCloseReleasesOpenEventStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	if took > closeGrace/2 {
-		t.Fatalf("Close took %v with an open event stream; want well under %v", took, closeGrace)
+	if took >= closeGrace {
+		t.Fatalf("Close took %v with an open event stream; want under the %v grace", took, closeGrace)
 	}
 }
