@@ -134,7 +134,7 @@ func startUIDev(ctx context.Context, sim *simulation.Sim, uiDir string, out io.W
 	)
 	cmd.Stdout = out
 	cmd.Stderr = out
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	startInOwnProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("--ui-dev: start `npm run dev`: %w (is Node installed?)", err)
 	}
@@ -151,16 +151,16 @@ func startUIDev(ctx context.Context, sim *simulation.Sim, uiDir string, out io.W
 	go func() {
 		select {
 		case <-ctx.Done():
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			terminateProcessGroup(cmd)
 		case <-done:
 		}
 	}()
 	return func() {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		terminateProcessGroup(cmd)
 		select {
 		case <-done:
 		case <-time.After(3 * time.Second):
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			killProcessGroup(cmd)
 		}
 	}, nil
 }

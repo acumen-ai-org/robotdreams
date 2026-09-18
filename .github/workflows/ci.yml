@@ -69,6 +69,13 @@ jobs:
       - name: Build
         run: go build ./...
 
+      # The CLI ships for all three; cross-compiling catches a Linux-only
+      # syscall before a release does. Tests still run on Linux only (#6).
+      - name: Cross-compile for macOS and Windows
+        run: |
+          GOOS=darwin GOARCH=arm64 go build ./...
+          GOOS=windows GOARCH=amd64 go build ./...
+
       - name: Vet
         run: go vet ./...
 
