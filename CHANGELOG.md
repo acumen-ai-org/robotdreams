@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0 (2026-09-18)
+
+
+### Miscellaneous Chores
+
+* bootstrap the first release ([0c07dd0](https://github.com/acumen-ai-org/robotdreams/commit/0c07dd0a20b7a09189f49b8c94a71ef3a3b0ea70))
+
+## Changelog
+
 All notable changes to this project are documented in this file.
 
 Versioned sections are written by [release-please](https://github.com/googleapis/release-please)
