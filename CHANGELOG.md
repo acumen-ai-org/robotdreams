@@ -1,23 +1,22 @@
 # Changelog
 
-## 0.1.0 (2026-09-18)
-
-
-### Miscellaneous Chores
-
-* bootstrap the first release ([0c07dd0](https://github.com/acumen-ai-org/robotdreams/commit/0c07dd0a20b7a09189f49b8c94a71ef3a3b0ea70))
-
-## Changelog
-
-All notable changes to this project are documented in this file.
-
 Versioned sections are written by [release-please](https://github.com/googleapis/release-please)
 from the Conventional Commits merged to `main`; the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
-## Before the first release
+## 0.1.0 (2026-09-18)
+
+The initial public release. Everything below the next heading is what it
+contains; the commit history was squashed in under prose titles, which is
+why release-please lists only the bootstrap commit here.
+
+### Miscellaneous Chores
+
+* bootstrap the first release ([0c07dd0](https://github.com/acumen-ai-org/robotdreams/commit/0c07dd0a20b7a09189f49b8c94a71ef3a3b0ea70))
+
+## What 0.1.0 contains
 
 Initial public release of Robot Dreams: two primitives (messaging, storage)
 and a control plane, plus the Mission Control dashboard.
