@@ -118,6 +118,13 @@ jobs:
             commitlint --from "${{ github.event.pull_request.base.sha }}" \
                        --to "${{ github.event.pull_request.head.sha }}" --verbose
 
+      # A squash merge takes the pull request title as the commit subject,
+      # and release-please reads that subject, so the title must parse too.
+      - name: commitlint (the pull request title)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | npx --yes -p @commitlint/cli@19.8.1 commitlint --verbose
+
   lint:
     name: golangci-lint
     runs-on: ubuntu-latest
