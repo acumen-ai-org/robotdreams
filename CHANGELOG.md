@@ -6,6 +6,13 @@ from the Conventional Commits merged to `main`; the project adheres to
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
+## [0.1.2](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.1...v0.1.2) (2026-09-18)
+
+
+### Bug Fixes
+
+* **cli:** build on Windows — process groups behind build tags ([ae2fdd0](https://github.com/acumen-ai-org/robotdreams/commit/ae2fdd001401e08cbc56c4e876dd08a84fd8b929)), closes [#6](https://github.com/acumen-ai-org/robotdreams/issues/6)
+
 ## [0.1.1](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.0...v0.1.1) (2026-09-18)
 
 
