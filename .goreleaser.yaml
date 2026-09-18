@@ -15,10 +15,7 @@ project_name: dream
 # PATH; release.yml sets that up. A failing hook aborts the release.
 before:
   hooks:
-    - cmd: npm ci
-      dir: internal/dashboard/ui
-    - cmd: npm run build
-      dir: internal/dashboard/ui
+    - sh -c "cd internal/dashboard/ui && npm ci && npm run build"
 
 builds:
   - id: dream
