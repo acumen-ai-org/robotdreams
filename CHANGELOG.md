@@ -6,6 +6,13 @@ from the Conventional Commits merged to `main`; the project adheres to
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
+## [0.1.1](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.0...v0.1.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* **release:** goreleaser before hook as one shell command ([7ab6617](https://github.com/acumen-ai-org/robotdreams/commit/7ab6617b19832bc4bd89ba51ba7a351e728316ac))
+
 ## 0.1.0 (2026-09-18)
 
 The initial public release. Everything below the next heading is what it
