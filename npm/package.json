@@ -1,6 +1,6 @@
 {
   "name": "robotdreams",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Robot Dreams `dream` CLI: a lightweight control plane for fleets of autonomous software agents. npm wrapper that downloads the prebuilt Go binary for your platform.",
   "license": "Apache-2.0",
   "author": "Acumen AI",
