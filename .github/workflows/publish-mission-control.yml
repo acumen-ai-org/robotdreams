@@ -1,0 +1,97 @@
+# Publish @robotdreams/mission-control to npm.
+#
+# Nothing here runs on its own: it takes either a manual dispatch (which
+# defaults to a dry run) or a tag of the form mission-control-v<version>,
+# where <version> must equal the version in the package's package.json.
+# A real publish needs the NPM_TOKEN repository secret (an npm automation
+# token for the @robotdreams scope); a dry run needs nothing.
+#
+# Until the package is published, use it locally: `npm run build:lib`,
+# then `npm pack -w @robotdreams/mission-control` and install the
+# tarball, or depend on the package directory with a file: path.
+#
+# Actions are pinned to full commit SHAs; the tag is in the comment.
+name: Publish Mission Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build, smoke-test and run `npm publish --dry-run` (no upload)"
+        type: boolean
+        default: true
+      dist_tag:
+        description: "npm dist-tag for a real publish"
+        type: string
+        default: "latest"
+  push:
+    tags:
+      - "mission-control-v*"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    defaults:
+      run:
+        working-directory: internal/dashboard/ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: internal/dashboard/ui/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build the library
+        run: npm run build:lib
+
+      - name: Smoke-test the built package
+        run: npm run smoke
+
+      - name: Tag matches package version
+        if: github.ref_type == 'tag'
+        run: |
+          want="${GITHUB_REF_NAME#mission-control-v}"
+          have="$(node -p "require('./packages/mission-control/package.json').version")"
+          if [ "$want" != "$have" ]; then
+            echo "tag says $want but packages/mission-control/package.json says $have" >&2
+            exit 1
+          fi
+
+      - name: Publish (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: npm publish -w @robotdreams/mission-control --access public --dry-run
+
+      - name: Publish
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          tag="${{ github.event_name == 'workflow_dispatch' && inputs.dist_tag || 'latest' }}"
+          npm publish -w @robotdreams/mission-control --access public --provenance --tag "$tag"

@@ -25,7 +25,9 @@ env:
   NODE_VERSION: "22"
 
 jobs:
-  # Build, vet, format check and race-detector unit tests.
+  # Build, vet, format check and race-detector unit tests. Mission Control
+  # is built first so internal/dashboard's asset tests run against the real
+  # bundle rather than the committed placeholder (which they skip on).
   go:
     name: Go build and test
     runs-on: ubuntu-latest
@@ -44,6 +46,19 @@ jobs:
             echo "$tracked"
             exit 1
           fi
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: internal/dashboard/ui/package-lock.json
+
+      - name: Build Mission Control
+        working-directory: internal/dashboard/ui
+        run: |
+          npm ci
+          npm run build
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -68,6 +83,16 @@ jobs:
 
       - name: Test (race detector)
         run: go test -race ./...
+
+      # Dashboard package tests must have seen the real bundle, not skipped.
+      - name: Dashboard asset tests ran against the real build
+        run: |
+          out="$(go test -race -run 'TestStaticAssetsAreServedWithCorrectContentType' -v ./internal/dashboard/)"
+          echo "$out"
+          case "$out" in
+            *"--- PASS: TestStaticAssetsAreServedWithCorrectContentType"*) ;;
+            *) echo "::error::asset tests were skipped: the Mission Control build did not land in internal/dashboard/web"; exit 1 ;;
+          esac
 
   # Commit subjects follow Conventional Commits (CONTRIBUTING.md); the
   # changelog and version bumps are derived from them by release-please.
@@ -128,6 +153,52 @@ jobs:
           go-version-file: go.mod
           go-package: ./...
           repo-checkout: false
+
+  # Mission Control's own gates: eslint, prettier, tsc, the app build, and
+  # the @robotdreams/mission-control library built the way `npm publish`
+  # would and proven through a consumer that installs it via its exports
+  # map, with no alias.
+  dashboard-ui:
+    name: Mission Control
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: internal/dashboard/ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: internal/dashboard/ui/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (vitest)
+        run: npm run test
+
+      - name: Build the app
+        run: npm run build
+
+      - name: Build the component library
+        run: npm run build:lib
+
+      - name: Smoke-test the built package
+        run: npm run smoke
 
   # The release archive naming contract lives in .goreleaser.yaml and is
   # mirrored by two consumers: npm/scripts/install.js and

@@ -15,7 +15,12 @@
 #     --tls-cert /tls/cert.pem --tls-key /tls/key.pem --reports /reports
 #
 # Build notes:
-#   - Two stages: `build` compiles Go, the final stage is runtime only.
+#   - Three stages. `ui` builds Mission Control (internal/dashboard/ui,
+#     Vite) into internal/dashboard/web/dist/; `build` compiles Go with that
+#     output embedded (the repository only commits a placeholder page —
+#     see internal/dashboard/embed.go); the final stage is runtime only.
+#   - The ui stage copies the workspace manifests first so `npm ci` is
+#     cached until a lockfile changes, then the source.
 #   - CGO_ENABLED=0 + modernc.org/sqlite (pure Go) gives a static binary;
 #     the runtime image is alpine rather than scratch only so operators can
 #     `kubectl exec ... cat <data-dir>/enrollment.token` (the enrollment
@@ -28,11 +33,25 @@
 #     --tls-cert/--tls-key unless --insecure is passed; a container must
 #     bind a non-loopback address to be reachable at all, hence the flag.
 
+FROM node:22-alpine AS ui
+WORKDIR /src/internal/dashboard/ui
+COPY internal/dashboard/ui/package.json internal/dashboard/ui/package-lock.json ./
+COPY internal/dashboard/ui/app/package.json app/
+COPY internal/dashboard/ui/packages/mission-control/package.json packages/mission-control/
+RUN npm ci
+COPY internal/dashboard/ui/ ./
+# vite.config.ts writes to ../../web/dist, i.e. /src/internal/dashboard/web/dist.
+RUN npm run build
+
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+# Whatever the build context had under web/ (the placeholder, or a stale
+# local build) is replaced by the ui stage's fresh output.
+RUN rm -rf internal/dashboard/web/dist
+COPY --from=ui /src/internal/dashboard/web/dist internal/dashboard/web/dist
 ARG VERSION=0.1.0-dev
 RUN CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X main.version=${VERSION}" \
