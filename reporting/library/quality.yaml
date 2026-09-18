@@ -1,11 +1,3 @@
-# Report template: quality — whether the work was right. Distinct from
-# delivery (which counts what shipped) and from failures (which counts
-# what broke): work can ship, not break, and still be wrong twice before
-# it is accepted. Copy, rename, and adapt.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: quality
@@ -23,8 +15,6 @@ scope:
       reviews: sum
       accepted: sum
       rework: sum
-      # A rate is averaged, never summed — three squads at 90% do not
-      # make 270%.
       acceptance_rate: avg
     timeline: merge
     pulse: sample(30)
@@ -34,7 +24,6 @@ data:
     - { name: reviews, unit: count, window: 24h }
     - { name: accepted, unit: count, window: 24h }
     - { name: rework, unit: count, window: 24h }
-    # Below 85% accepted, the review loop is costing more than it saves.
     - { name: acceptance_rate, unit: percent, target: 85, direction: below }
   series:
     - { name: acceptance_trend, unit: percent }
@@ -45,7 +34,6 @@ data:
   tables:
     - name: recent_reviews
       columns: [when, artifact, reviewer, outcome]
-    # Stage-and-count rows in process order, for the funnel.
     - name: acceptance_by_unit
       columns: [unit, acceptance_rate]
     - name: review_stages
@@ -64,7 +52,6 @@ facets:
   detail:
     panels:
       - { title: Acceptance rate, primitive: timeseries, data: series/acceptance_trend, section: overview }
-      # Submitted work narrowing to accepted work: the gap is rework.
       - { title: Review funnel, primitive: funnel, data: table/review_stages, section: drivers }
       - { title: Acceptance by unit, primitive: bar_ranked, data: table/acceptance_by_unit, section: drivers }
       - { title: Recent reviews, primitive: datagrid, data: table/recent_reviews, section: detail }

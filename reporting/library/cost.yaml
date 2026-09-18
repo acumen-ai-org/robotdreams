@@ -1,11 +1,3 @@
-# Report template: cost — what the work consumed. Deliberately its own
-# category rather than a corner of performance: it has a different owner
-# (finance reads it, not the on-call), and every field sums when rolled
-# up where performance percentiles do not. Copy, rename, and adapt.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: cost
@@ -19,20 +11,13 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # Every one of these sums: cost is the rare case where naive
-    # addition is exactly right at every level.
     kpis:
       tokens: sum
       compute_minutes: sum
       spend_usd: sum
-      # The one field here that does not sum: budgets are per team, so
-      # a group is over budget on average, not by addition.
       budget_used_pct: avg
     timeline: merge
     pulse: sample(20)
-    # Over a period the counters sum the same way they do across scopes;
-    # budget_used_pct stays latest — the newest reading is where the team
-    # stands against its budget, not an average of where it stood.
     time:
       kpis:
         tokens: sum
@@ -43,14 +28,7 @@ data:
   kpis:
     - { name: tokens, unit: count, window: 24h }
     - { name: compute_minutes, unit: minutes, window: 24h }
-    # The budget is per team, so the instance carries the number and
-    # the definition carries only which way is bad.
     - { name: spend_usd, unit: count, window: 24h, direction: above }
-    # Spend against the team's OWN budget. This exists because an
-    # absolute threshold cannot judge spend across teams of different
-    # sizes: a 600-person care operation spending more than a 10-person
-    # risk desk is not a finding, it is arithmetic. The ratio is what
-    # travels, so it is what the status rule reads.
     - { name: budget_used_pct, unit: percent, window: 24h, target: 100, direction: above }
   series:
     - { name: spend_rate, unit: per-hour }
@@ -60,13 +38,8 @@ data:
   tables:
     - name: top_spenders
       columns: [node, tokens, compute_minutes, spend_usd]
-    # The bridge from yesterday's spend to today's: a starting total,
-    # the signed movements that explain it, and the closing total. kind
-    # is `total` for the two ends and `delta` for everything between.
     - name: spend_bridge
-      columns: [step, amount, kind]
-    # One row per contributing unit, so a roll-up ranks the squads
-    # beneath it without any extra aggregation rule.
+      columns: [step, amount, kind]  # kind: total at the ends, delta between
     - name: spend_by_unit
       columns: [unit, spend_usd]
 
@@ -80,8 +53,6 @@ facets:
     events: [budget.threshold, budget.exceeded]
     milestones: [budget.exceeded]
   detail:
-    # Sections put the page in reading order: what happened, how it
-    # compares, why it moved, what needs a decision, then the numbers.
     panels:
       - { title: Spend rate, primitive: timeseries, data: series/spend_rate, section: overview }
       - { title: Spend against budget, primitive: gauge, data: kpi/budget_used_pct, section: performance }

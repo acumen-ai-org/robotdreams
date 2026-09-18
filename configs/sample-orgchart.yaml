@@ -1,0 +1,52 @@
+# Robot Dreams sample org chart.
+#
+# The org graph is a forest rooted at an implicit root — the control-plane
+# server itself. A worker with an empty `reports_to` reports directly to
+# root; every other `reports_to` must name another `id` declared in this
+# file. Cycles are rejected at load time.
+#
+# `role` is a free-form label: the control plane stores it and shows it in
+# the dashboard, but does not interpret it.
+#
+# Escalation moves one hop at a time. A contributor that cannot resolve
+# something escalates to its lead; if the lead cannot either, the lead
+# escalates to root. Nothing skips a level.
+#
+# Load with:
+#   dream server --orgchart configs/sample-orgchart.yaml
+
+workers:
+  # --- Leads: report directly to the server (root) ---
+  - id: lead-research
+    role: lead
+    reports_to: ""
+
+  - id: lead-build
+    role: lead
+    reports_to: ""
+
+  # --- Research team ---
+  - id: research-sources
+    role: contributor
+    reports_to: lead-research
+
+  - id: research-synthesis
+    role: contributor
+    reports_to: lead-research
+
+  - id: research-factcheck
+    role: reviewer
+    reports_to: lead-research
+
+  # --- Build team ---
+  - id: build-implement
+    role: contributor
+    reports_to: lead-build
+
+  - id: build-tests
+    role: contributor
+    reports_to: lead-build
+
+  - id: build-review
+    role: reviewer
+    reports_to: lead-build

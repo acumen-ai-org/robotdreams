@@ -11,10 +11,7 @@ type Registry struct {
 	byName map[string]*Definition
 }
 
-// NewRegistry builds a registry from a slice of definitions, typically the
-// result of LoadLibraryDir. If two definitions share a name the later one
-// wins (LoadLibraryDir rejects duplicates, so this only matters for
-// hand-built slices).
+// NewRegistry builds a registry from a slice of definitions, typically the result of LoadLibraryDir.
 func NewRegistry(defs []*Definition) *Registry {
 	r := &Registry{byName: make(map[string]*Definition, len(defs))}
 	for _, d := range defs {

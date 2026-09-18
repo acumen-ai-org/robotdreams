@@ -1,0 +1,10 @@
+# Onboarding template: a Linux box that answers messages with an AI agent.
+#
+# This is a document printed by `dream node onboard --template
+# linux-onstart-claude`. It installs nothing. See docs/templates.md.
+summary: "On Linux start, listen for messages and hand each one to an AI coding agent."
+
+assumes:
+  - "You have already run `dream worker connect` on this machine, so ~/.dream/<server-id>/identity.key and config.json exist."
+  - "`claude` and `jq` are on PATH."
+  - "systemd is available — the brief ships both a user unit and a system unit."

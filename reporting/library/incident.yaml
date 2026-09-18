@@ -1,9 +1,3 @@
-# Report template: incident — errors, degradations, rollbacks, and
-# their lifecycle. Copy, rename, and adapt.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: incident
@@ -56,7 +50,6 @@ facets:
       - { title: Error rate, primitive: timeseries, data: series/error_rate, section: overview }
       - { title: Time to restore, primitive: kpi_card, data: kpi/mttr_minutes, section: performance }
       - { title: Where incidents land, primitive: bar_ranked, data: table/incidents_by_unit, section: drivers }
-      # The only panel anyone acts on, so it is the one named.
       - { title: Open incidents, primitive: datagrid, data: table/open_list, section: exceptions }
       - { title: Incident windows, primitive: gantt, data: spans/incident, section: detail }
     drilldown: [logs, performance]

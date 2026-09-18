@@ -1,6 +1,4 @@
-// Package localfs implements storage.StorageBackend on top of a local
-// filesystem directory. It is intended as the reference/development
-// backend for Robot Dreams before cloud-backed implementations exist.
+// Package localfs is the reference storage.StorageBackend on a local filesystem directory, registered as file:///<path>.
 package localfs
 
 import (
@@ -23,24 +21,9 @@ import (
 	"github.com/acumen-ai-org/robotdreams/pkg/storage"
 )
 
-// maxRevisionHistory bounds how many past revisions Revisions() will
-// return per path. This is a deliberate, documented tradeoff: keeping
-// unbounded history on a local filesystem backend would grow without
-// limit, so we retain only the most recent maxRevisionHistory revision
-// records per path, pruning older ones on write. See revisionStore below
-// for the on-disk layout.
 const maxRevisionHistory = 10
 
-// Backend is a storage.StorageBackend implementation rooted at a local
-// directory. All object content lives under root, mirroring each object's
-// path as a file path. Revision history is tracked separately in a
-// sibling ".meta" directory (see revisionStore).
-//
-// Backend is safe for concurrent use. A single mutex guards the
-// check-then-write critical section for every Put, so IfMatchRevision
-// checks never race with a concurrent write (TOCTOU-safe). This trades
-// some write throughput for simplicity; correctness matters more than
-// throughput in this phase, per design.
+// Backend is a storage.StorageBackend rooted at a local directory, with revision history in a sibling .meta directory.
 type Backend struct {
 	root  string
 	clock security.Clock
@@ -48,15 +31,12 @@ type Backend struct {
 	mu sync.Mutex
 }
 
-// New creates a Backend rooted at root, creating the directory if it does
-// not already exist. It uses security.RealClock{} for timestamps.
+// New creates a Backend rooted at root, creating the directory if needed.
 func New(root string) (*Backend, error) {
 	return NewWithClock(root, security.RealClock{})
 }
 
-// NewWithClock creates a Backend rooted at root using the given clock for
-// UpdatedAt timestamps, creating the directory if it does not already
-// exist. Tests should pass a fake clock for deterministic timestamps.
+// NewWithClock is New with the clock used for UpdatedAt timestamps.
 func NewWithClock(root string, clock security.Clock) (*Backend, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -70,9 +50,6 @@ func NewWithClock(root string, clock security.Clock) (*Backend, error) {
 
 func init() {
 	storage.Register("file", func(u *url.URL) (storage.StorageBackend, error) {
-		// Accept both file:///abs/path (u.Path set) and a tolerant
-		// plain-path form where the path ended up in u.Opaque or
-		// u.Host+u.Path (e.g. "file://relative/path").
 		p := u.Path
 		if p == "" {
 			p = u.Opaque
@@ -87,24 +64,6 @@ func init() {
 	})
 }
 
-// resolvePath validates and cleans an object path, returning both the
-// absolute filesystem path it maps to under root and the canonical,
-// slash-separated relative form of objPath (its filepath.Clean'd form,
-// e.g. "./a//b.txt" and "a/b.txt" both canonicalize to "a/b.txt"). It
-// rejects outright any path that is absolute or contains a ".." segment,
-// rather than silently clamping it into root, so that Get, Put, Delete,
-// Stat, and Revisions can never read or write outside root and callers
-// get a clear error for malicious/malformed input.
-//
-// Callers MUST use the returned canonical relative path — not the raw
-// objPath argument — as the key for any revision-metadata operation
-// (statLocked, recordRevision, removeRevisionHistory, loadRevisionHistory,
-// metaDir). Two spellings of the same object (e.g. "victim.txt" and
-// "./victim.txt") resolve to the same file on disk; keying metadata on the
-// raw, uncleaned string would let a write under one spelling silently
-// bypass the revision history — and therefore IfMatchRevision's
-// optimistic-concurrency guarantee — recorded under another spelling of
-// the identical path.
 func (b *Backend) resolvePath(objPath string) (full, rel string, err error) {
 	if objPath == "" {
 		return "", "", fmt.Errorf("localfs: empty path")
@@ -120,30 +79,22 @@ func (b *Backend) resolvePath(objPath string) (full, rel string, err error) {
 
 	rel = filepath.ToSlash(filepath.Clean(filepath.FromSlash(objPath)))
 
-	// Reject the reserved ".meta" bookkeeping namespace outright: it holds
-	// this backend's own revision-history records (see metaDir below), and
-	// List already skips it. Without this check a caller could write a
-	// forged revision record directly (attributing a write to an arbitrary
-	// UpdatedBy, surfaced verbatim in the X-Updated-By response header) or
-	// stash content that is readable via Get/Stat but invisible to every
-	// enumeration path (List, the dashboard, the SSE storage feed) — a
-	// covert channel through the public storage API.
-	if rel == metaDirName || strings.HasPrefix(rel, metaDirName+"/") {
+	if isReservedMetaPath(rel) {
 		return "", "", fmt.Errorf("localfs: invalid path %q: %q is a reserved name", objPath, metaDirName)
 	}
 
 	full = filepath.Join(b.root, rel)
 
-	// Belt-and-braces: confirm the resolved path is still under root.
-	rootWithSep := b.root + string(filepath.Separator)
-	if full != b.root && !strings.HasPrefix(full, rootWithSep) {
+	if !isUnderRoot(b.root, full) {
 		return "", "", fmt.Errorf("localfs: invalid path %q: escapes root", objPath)
 	}
 	return full, rel, nil
 }
 
-// contentHash returns the SHA-256 hex digest of data, used as the object's
-// revision.
+func isUnderRoot(root, full string) bool {
+	return full == root || strings.HasPrefix(full, root+string(filepath.Separator))
+}
+
 func contentHash(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
@@ -212,9 +163,6 @@ func (b *Backend) Put(ctx context.Context, path string, r io.Reader, opts storag
 		return storage.ObjectMeta{}, fmt.Errorf("localfs: creating parent dir for %q: %w", path, err)
 	}
 
-	// Atomic write: write to a temp file in the same directory, then
-	// rename into place, so a crash mid-write never leaves partial
-	// content visible to readers.
 	if err := atomicWrite(full, data); err != nil {
 		return storage.ObjectMeta{}, fmt.Errorf("localfs: writing %q: %w", path, err)
 	}
@@ -234,8 +182,6 @@ func (b *Backend) Put(ctx context.Context, path string, r io.Reader, opts storag
 	return meta, nil
 }
 
-// atomicWrite writes data to a temp file alongside dest and renames it
-// into place, so readers never observe a partially written file.
 func atomicWrite(dest string, data []byte) error {
 	dir := filepath.Dir(dest)
 	tmp, err := os.CreateTemp(dir, ".tmp-*")
@@ -243,7 +189,7 @@ func atomicWrite(dest string, data []byte) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // no-op once renamed
+	defer os.Remove(tmpName)
 
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
@@ -310,7 +256,7 @@ func (b *Backend) List(ctx context.Context, prefix string) ([]storage.ObjectMeta
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		if rel == metaDirName || strings.HasPrefix(rel, metaDirName+"/") {
+		if isReservedMetaPath(rel) {
 			return nil
 		}
 		if !strings.HasPrefix(rel, prefix) {
@@ -350,10 +296,6 @@ func (b *Backend) Stat(ctx context.Context, path string) (storage.ObjectMeta, er
 	return b.statLocked(rel, full)
 }
 
-// statLocked computes ObjectMeta for path, preferring the latest recorded
-// revision entry (which carries UpdatedBy/UpdatedAt) and falling
-// back to filesystem-derived values if no revision record exists. Callers
-// must hold b.mu.
 func (b *Backend) statLocked(path, full string) (storage.ObjectMeta, error) {
 	info, err := os.Stat(full)
 	if err != nil {
@@ -368,8 +310,6 @@ func (b *Backend) statLocked(path, full string) (storage.ObjectMeta, error) {
 		return latest, nil
 	}
 
-	// No revision record (e.g. file created out-of-band): derive
-	// best-effort metadata from the filesystem.
 	data, err := os.ReadFile(full)
 	if err != nil {
 		return storage.ObjectMeta{}, fmt.Errorf("localfs: reading %q for hash: %w", path, err)
@@ -405,8 +345,7 @@ func (b *Backend) Revisions(ctx context.Context, path string) ([]storage.ObjectM
 	return b.loadRevisionHistory(rel), nil
 }
 
-// Health implements storage.StorageBackend by checking that root is
-// accessible and writable.
+// Health implements storage.StorageBackend.
 func (b *Backend) Health(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -431,33 +370,20 @@ func (b *Backend) Health(ctx context.Context) error {
 	return nil
 }
 
-// Close implements storage.StorageBackend. It is a no-op: Backend holds no
-// resources beyond open file handles scoped to individual calls (each Get
-// call's ReadCloser is independently closeable by its caller), so there is
-// nothing to release here.
+// Close implements storage.StorageBackend.
 func (b *Backend) Close() error {
 	return nil
 }
 
-// --- revision history ---
-//
-// Design: revision history is kept in a sibling ".meta/<sha256(path)>/"
-// directory under root, as a JSON-lines-free set of numbered metadata
-// files (0000.json, 0001.json, ...) plus a small index file recording the
-// next sequence number. On each Put, a new metadata record is appended and
-// the oldest records beyond maxRevisionHistory are pruned. This keeps
-// Revisions() O(maxRevisionHistory) and avoids unbounded growth, at the
-// cost of not retaining full history forever — a deliberate tradeoff for
-// this phase (see maxRevisionHistory).
-
 const metaDirName = ".meta"
 
-// Records written by older versions may still carry JSON keys for
-// ObjectMeta fields that no longer exist; encoding/json ignores unknown
-// fields, so those records still decode and need no migration.
 type revisionRecord struct {
 	Seq  int `json:"seq"`
 	Meta storage.ObjectMeta
+}
+
+func isReservedMetaPath(rel string) bool {
+	return rel == metaDirName || strings.HasPrefix(rel, metaDirName+"/")
 }
 
 func (b *Backend) metaDir(path string) string {
@@ -465,8 +391,6 @@ func (b *Backend) metaDir(path string) string {
 	return filepath.Join(b.root, metaDirName, hex.EncodeToString(h[:]))
 }
 
-// recordRevision appends a new revision record for path and prunes older
-// records beyond maxRevisionHistory. Callers must hold b.mu.
 func (b *Backend) recordRevision(path string, meta storage.ObjectMeta) error {
 	dir := b.metaDir(path)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -499,8 +423,6 @@ func (b *Backend) recordRevision(path string, meta storage.ObjectMeta) error {
 	return nil
 }
 
-// loadRevisionRecordsLocked reads all revision records currently on disk
-// for dir, sorted by sequence number ascending. Callers must hold b.mu.
 func (b *Backend) loadRevisionRecordsLocked(dir string) []revisionRecord {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -525,8 +447,6 @@ func (b *Backend) loadRevisionRecordsLocked(dir string) []revisionRecord {
 	return records
 }
 
-// latestRevision returns the most recently recorded revision metadata for
-// path, if any. Callers must hold b.mu.
 func (b *Backend) latestRevision(path string) (storage.ObjectMeta, bool) {
 	records := b.loadRevisionRecordsLocked(b.metaDir(path))
 	if len(records) == 0 {
@@ -535,8 +455,6 @@ func (b *Backend) latestRevision(path string) (storage.ObjectMeta, bool) {
 	return records[len(records)-1].Meta, true
 }
 
-// loadRevisionHistory returns metadata for all retained revisions of path,
-// oldest first. Callers must hold b.mu.
 func (b *Backend) loadRevisionHistory(path string) []storage.ObjectMeta {
 	records := b.loadRevisionRecordsLocked(b.metaDir(path))
 	result := make([]storage.ObjectMeta, 0, len(records))
@@ -546,8 +464,6 @@ func (b *Backend) loadRevisionHistory(path string) []storage.ObjectMeta {
 	return result
 }
 
-// removeRevisionHistory deletes all retained revision records for path.
-// Callers must hold b.mu.
 func (b *Backend) removeRevisionHistory(path string) {
 	os.RemoveAll(b.metaDir(path))
 }

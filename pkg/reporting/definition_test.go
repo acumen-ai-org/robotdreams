@@ -125,8 +125,6 @@ func TestFacetNames(t *testing.T) {
 	}
 }
 
-// minimalDoc builds a structurally complete document around one bad
-// fragment so table cases only trip their intended validation rule.
 const minimalHeader = `version: v1alpha1
 kind: ReportDefinition
 name: t
@@ -419,8 +417,6 @@ func TestParseDefinitionMalformedYAML(t *testing.T) {
 }
 
 func TestParseDefinitionExtendsDefersRefValidation(t *testing.T) {
-	// A child that references data it will inherit must parse standalone;
-	// LoadLibraryDir validates references after resolving the chain.
 	const child = `version: v1alpha1
 kind: ReportDefinition
 name: child
@@ -438,9 +434,6 @@ facets:
 	}
 }
 
-// TestKPITargetValidation: a direction must come from the shared
-// vocabulary, and a target without one is rejected — a target nobody
-// can be on the wrong side of says nothing.
 func TestKPITargetValidation(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -481,7 +474,6 @@ func TestTimeAggregationDefaults(t *testing.T) {
 			a.TimeStatusPolicy(), a.TimeHeadlinePolicy(), a.TimeKPIPolicy("x"), a.TimeKPIPolicy("y"))
 	}
 
-	// The shipped library declares sums for its counters and parses.
 	defs, err := LoadLibraryDir("../../reporting/library")
 	if err != nil {
 		t.Fatalf("LoadLibraryDir: %v", err)

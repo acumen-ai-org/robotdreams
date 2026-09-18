@@ -76,7 +76,7 @@ func TestScopeWithin(t *testing.T) {
 		{"acme", "music/acme", false},
 		{"acme/music", "acme/movies", false},
 		{"acme", "acmecorp", false},
-		{"acme/", "acme//music", true}, // empty segments trimmed
+		{"acme/", "acme//music", true},
 	}
 	for _, tt := range tests {
 		if got := ScopeWithin(tt.parent, tt.child); got != tt.want {

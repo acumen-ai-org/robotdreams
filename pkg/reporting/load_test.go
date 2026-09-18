@@ -99,13 +99,12 @@ scope:
 	if len(defs) != 2 {
 		t.Fatalf("got %d definitions, want 2", len(defs))
 	}
-	// Filename order: base.yaml then child.yaml.
+
 	base, child := defs[0], defs[1]
 	if base.Name != "base" || child.Name != "child" {
 		t.Fatalf("names = %q, %q; want base, child", base.Name, child.Name)
 	}
 
-	// Non-zero child fields override wholesale.
 	if child.Description != "child override" {
 		t.Errorf("child.Description = %q, want the override", child.Description)
 	}
@@ -116,7 +115,6 @@ scope:
 		t.Errorf("child kpi policy = %q, want max", got)
 	}
 
-	// Zero child fields inherit from the parent.
 	if len(child.Categories) != 1 || child.Categories[0] != "performance" {
 		t.Errorf("child.Categories = %v, want inherited [performance]", child.Categories)
 	}
@@ -126,7 +124,7 @@ scope:
 	if child.Facets.Summary == nil || child.Facets.Summary.Sparkline != "latency" {
 		t.Errorf("child.Facets.Summary = %+v, want inherited", child.Facets.Summary)
 	}
-	// Inherited structures are deep copies, never aliases of the parent.
+
 	if child.Facets.Summary == base.Facets.Summary {
 		t.Error("child summary facet aliases the parent's")
 	}
@@ -259,21 +257,13 @@ func TestLoadLibraryDirMissingDir(t *testing.T) {
 	}
 }
 
-// TestLoadShippedLibrary guards the checked-in report library that the
-// server registers at startup: every definition must load and
-// cross-validate with no error.
 func TestLoadShippedLibrary(t *testing.T) {
 	dir := filepath.Join("..", "..", "reporting", "library")
 	defs, err := LoadLibraryDir(dir)
 	if err != nil {
 		t.Fatalf("LoadLibraryDir(%s): %v", dir, err)
 	}
-	// The nine generic per-category templates must always be present.
-	// The library also ships the department reports a real company
-	// produces (a month-end close, a hiring funnel, a support queue,
-	// and so on), and those are expected to grow — so this asserts the
-	// floor and the ordering contract, not an exact count. A count
-	// assertion here would only ever be a chore to update.
+
 	want := []string{"activity", "cost", "decisions", "delivery", "incident", "logs", "performance", "quality", "roadmap"}
 	byName := map[string]bool{}
 	for _, d := range defs {
@@ -288,12 +278,6 @@ func TestLoadShippedLibrary(t *testing.T) {
 		t.Fatalf("got %d definitions, want at least %d", len(defs), len(want))
 	}
 
-	// Every shipped definition declares its stances. The SCHEMA makes
-	// the field optional — required would reject a perfectly good
-	// third-party definition, and "no opinion" is a real answer — but
-	// the shipped library is the reference implementation and is held to
-	// a higher bar: a report here that has not said how it should be
-	// judged has not finished being written.
 	for _, d := range defs {
 		if len(d.Stances) == 0 {
 			t.Errorf("definition %q declares no stances", d.Name)
@@ -305,9 +289,6 @@ func TestLoadShippedLibrary(t *testing.T) {
 		}
 	}
 
-	// LoadLibraryDir promises filename order; the definition name is
-	// the filename stem throughout the library, so the loaded set must
-	// come back sorted by name.
 	for i := 1; i < len(defs); i++ {
 		if defs[i-1].Name > defs[i].Name {
 			t.Errorf("defs[%d] %q sorts after defs[%d] %q; want filename order",
@@ -315,7 +296,6 @@ func TestLoadShippedLibrary(t *testing.T) {
 		}
 	}
 
-	// Spot-check delivery, the fully-faceted template.
 	r := NewRegistry(defs)
 	delivery, ok := r.Get("delivery")
 	if !ok {
@@ -344,9 +324,6 @@ func TestLoadShippedLibrary(t *testing.T) {
 	}
 }
 
-// A child that declares only a time fold still counts as overriding the
-// scope block (wholesale, like every other field), and an inherited time
-// fold is a deep copy.
 func TestLoadLibraryDirExtendsTimeAggregation(t *testing.T) {
 	dir := writeLibrary(t, map[string]string{
 		"base.yaml": strings.Replace(baseDefinition, "  aggregation:\n", "  aggregation:\n    time:\n      kpis: { latency_ms: max }\n", 1),

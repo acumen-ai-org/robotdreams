@@ -18,8 +18,8 @@ func TestParseCronStandardFiveFields(t *testing.T) {
 	if !got.Equal(want) {
 		t.Fatalf("next after %s = %s, want %s", from, got, want)
 	}
-	// Strictly after: a time exactly on the boundary moves to the next day.
-	if got2 := next(want); !got2.Equal(want.Add(24 * time.Hour)) {
+	onTheBoundary := want
+	if got2 := next(onTheBoundary); !got2.Equal(onTheBoundary.Add(24 * time.Hour)) {
 		t.Fatalf("next on the boundary = %s, want the day after", got2)
 	}
 }
@@ -29,10 +29,13 @@ func TestParseCronHonoursTZPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseCron: %v", err)
 	}
-	// Sunday 2026-09-13 12:00 UTC → Monday 09:00 Stockholm (CEST, UTC+2) = 07:00 UTC.
-	from := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
-	got := next(from)
-	want := time.Date(2026, 9, 14, 7, 0, 0, 0, time.UTC)
+	sundayNoonUTC := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	got := next(sundayNoonUTC)
+	stockholm, err := time.LoadLocation("Europe/Stockholm")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	want := time.Date(2026, 9, 14, 9, 0, 0, 0, stockholm).UTC()
 	if !got.Equal(want) {
 		t.Fatalf("next = %s, want %s", got, want)
 	}

@@ -1,0 +1,95 @@
+# Robot Dreams environment template: Kubernetes-provisioned.
+#
+# Copy this file, rename it after your environment, and adapt the values —
+# it is a starting point, not a fixed example. Everything here is legal
+# to delete: an environment may use any subset of the three branches.
+#
+#   workspace    - what the node stands in (checkouts, mounts, processes)
+#   services     - what the node can reach (databases, caches, APIs)
+#   capabilities - what the node may do (shell, browser, github, mcp)
+#
+# The three branches are portable across runtime adapters; `runtime`,
+# `policy`, and `lifecycle` are deployment concerns layered on top.
+# For a node that brings its own runtime, start from
+# environment-external.yaml instead.
+#
+# See docs/vision/environment.md for the full design.
+#
+# Register with:
+#   dream env apply <your-copy>.yaml
+# Attach a worker to it:
+#   dream worker connect --server <id> --environment build-standard
+
+version: v1alpha1
+kind: AgentEnvironment
+name: build-standard # rename: this is how workers reference it
+
+workspace:
+  git:
+    - repo: https://github.com/acumen-ai-org/robotdreams # your repo
+      ref: main
+      path: /work/robotdreams
+
+  filesystem:
+    # Ephemeral scratch space: gone when the environment is disposed.
+    - name: scratch
+      path: /work/scratch
+      ephemeral: true
+    # Backed by the storage primitive (the library): survives the
+    # environment, visible to other nodes via put/get.
+    - name: shared
+      path: /work/shared
+      library: default
+
+  processes:
+    - name: dev-server
+      command: ["make", "dev"]
+      workdir: /work/robotdreams
+      restart: on-failure
+
+services:
+  - name: postgres
+    type: postgres
+    version: "16"
+  - name: redis
+    type: redis
+  # An external API the node talks to but did not configure. The
+  # credential is referenced, never inlined.
+  - name: sum-api
+    type: http
+    url: https://api.example.com
+    auth:
+      secretRef: sum-api-token
+
+capabilities:
+  - use: shell
+  - use: browser
+  # Scoped grant: which repos, which permissions. The control plane
+  # mints the credential per-node where it can.
+  - use: github
+    with:
+      repos: [acumen-ai-org/robotdreams]
+      permissions: [contents:write, pull_requests:write]
+  - use: mcp
+    with:
+      servers:
+        - name: serena
+          command: ["serena", "serve"]
+
+runtime:
+  adapter: k8s
+  k8s:
+    namespace: dreams
+    resources:
+      cpu: "2"
+      memory: 4Gi
+
+policy:
+  network:
+    allow: [github.com, registry.npmjs.org]
+  maxLifetime: 8h
+
+lifecycle:
+  idleTimeout: 30m
+  # Deposit the final workspace state in the library before teardown.
+  onDispose: snapshot-workspace

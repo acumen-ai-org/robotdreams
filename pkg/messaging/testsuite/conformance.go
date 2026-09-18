@@ -1,7 +1,4 @@
-// Package testsuite provides a backend-agnostic conformance test suite for
-// implementations of messaging.MessagingBackend. Every backend package
-// should have a test that calls RunConformance against a factory that
-// builds a fresh instance of that backend.
+// Package testsuite is the conformance suite every messaging.MessagingBackend implementation runs.
 package testsuite
 
 import (
@@ -14,11 +11,7 @@ import (
 	"github.com/acumen-ai-org/robotdreams/pkg/messaging"
 )
 
-// RunConformance runs the messaging.MessagingBackend conformance suite
-// against backends produced by factory. factory must return an
-// independent, ready-to-use backend instance on each call — tests run
-// subtests that each obtain their own instance and must not observe state
-// left behind by another subtest.
+// RunConformance runs the conformance subtests, each against a fresh backend from factory.
 func RunConformance(t *testing.T, factory func() messaging.MessagingBackend) {
 	t.Helper()
 
@@ -94,7 +87,6 @@ func RunConformance(t *testing.T, factory func() messaging.MessagingBackend) {
 				t.Fatalf("worker-x unexpectedly received envelope addressed to worker-y: %+v", got)
 			}
 		case <-waitCtx.Done():
-			// Expected: nothing arrived within the bounded wait.
 		}
 	})
 
@@ -149,10 +141,6 @@ func RunConformance(t *testing.T, factory func() messaging.MessagingBackend) {
 			t.Fatalf("Emit: %v", err)
 		}
 
-		// Neither the sender nor an unrelated worker that has learned
-		// the ID may ack it: an acknowledgment is an assertion that the
-		// recipient handled the message, so only the recipient can make
-		// it. Both must look exactly like "no such message".
 		for _, by := range []string{"worker-a", "worker-z"} {
 			err := backend.Ack(ctx, messaging.Ack{
 				MessageID: env.ID,
@@ -165,8 +153,6 @@ func RunConformance(t *testing.T, factory func() messaging.MessagingBackend) {
 			}
 		}
 
-		// A rejected ack must leave the message untouched: the real
-		// recipient can still ack it afterwards.
 		err := backend.Ack(ctx, messaging.Ack{
 			MessageID: env.ID,
 			ByWorker:  "worker-x",
@@ -198,9 +184,8 @@ func RunConformance(t *testing.T, factory func() messaging.MessagingBackend) {
 			select {
 			case _, ok := <-ch:
 				if !ok {
-					return // channel closed as required.
+					return
 				}
-				// Drain any in-flight envelope and keep waiting for close.
 			case <-timeout.C:
 				t.Fatal("timed out waiting for subscribe channel to close after context cancellation")
 			}
@@ -210,10 +195,6 @@ func RunConformance(t *testing.T, factory func() messaging.MessagingBackend) {
 	t.Run("close ends live subscriptions", func(t *testing.T) {
 		backend := factory()
 
-		// The subscriber's ctx deliberately never ends: Close alone must
-		// be enough to shut the subscription down, or a poller would go
-		// on ticking against a closed backend for as long as the ctx
-		// lives.
 		ch, err := backend.Subscribe(context.Background(), "worker-x")
 		if err != nil {
 			backend.Close()
@@ -231,9 +212,8 @@ func RunConformance(t *testing.T, factory func() messaging.MessagingBackend) {
 			select {
 			case _, ok := <-ch:
 				if !ok {
-					return // channel closed as required.
+					return
 				}
-				// Drain any in-flight envelope and keep waiting for close.
 			case <-timeout.C:
 				t.Fatal("timed out waiting for subscribe channel to close after Close")
 			}

@@ -36,3 +36,4 @@ vulncheck:
 # Everything CI runs, in CI's order.
 ci: vet lint test-race vulncheck
 	go build ./...
+	node npm/scripts/install.js --self-test

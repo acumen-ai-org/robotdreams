@@ -1,17 +1,3 @@
-# Report definition: editorial — playlist programming. Genuinely
-# creative work on a hard weekly rhythm: the Friday release day does not
-# move, so the week ramps into Thursday, empties on Friday morning, and
-# starts again. Produced by the editorial teams that program and refresh
-# playlists, not by anyone who runs software.
-#
-# The numbers a programming lead cares about are how many slots got
-# filled, how many pitches were worth taking, and how much listening
-# the desk is actually responsible for. Impressions and CTR belong to
-# marketing; they are deliberately not here.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: editorial
@@ -30,8 +16,6 @@ scope:
       pitches_reviewed: sum
       pitches_accepted: sum
       first_listen_adds: sum
-      # Fill rate and editorial share are rates: they average. Two
-      # desks at 98% filled are not a desk at 196%.
       slots_filled_pct: avg
       editorial_share_pct: avg
     timeline: merge
@@ -40,14 +24,10 @@ scope:
 data:
   kpis:
     - { name: playlists_refreshed, unit: count, window: 24h }
-    # An empty slot on a flagship playlist on a Friday morning is the
-    # one failure this desk does not accept, so the target is total.
     - { name: slots_filled_pct, unit: percent, target: 100, direction: below }
     - { name: pitches_reviewed, unit: count, window: 24h }
     - { name: pitches_accepted, unit: count, window: 24h }
     - { name: first_listen_adds, unit: count, window: 24h }
-    # The share of listening that comes through editorial programming.
-    # No target: it is a measure of influence, not a commitment.
     - { name: editorial_share_pct, unit: percent }
   series:
     - { name: pitch_volume, unit: count }
@@ -58,14 +38,10 @@ data:
     - { type: slot.unfilled, severity: warn }
     - { type: release.late, severity: warn }
   tables:
-    # Pitched narrows to programmed and then to charted. The drop from
-    # pitched to shortlisted is the desk's taste; the drop from
-    # programmed to charted is the audience's.
     - name: pitch_stages
       columns: [stage, count]
     - name: adds_by_playlist
       columns: [playlist, first_listen_adds]
-    # What still has a hole in it, and what is holding it up.
     - name: open_slots
       columns: [playlist, slot_date, genre, blocker]
     - name: recent_programming

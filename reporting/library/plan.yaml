@@ -1,17 +1,3 @@
-# Report template: plan — what a department has committed to doing next.
-#
-# The generic forward-looking template for the roadmap category, and the
-# companion to `roadmap`: roadmap reports whether the plan is holding
-# (milestones hit, missed, slipped), this reports what the plan IS. One
-# looks backward at a commitment, the other states it.
-#
-# Attaches at realm and world, because planning is what a department lead
-# and a VP both do — the altitude changes the size of the item, not the
-# shape of the report.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: plan
@@ -25,9 +11,6 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # Items and effort sum. Confidence is a ratio and averages: adding two
-    # departments' confidence produces a number above 100 that means
-    # nothing.
     kpis:
       items_committed: sum
       items_slipped: sum
@@ -40,8 +23,6 @@ scope:
 data:
   kpis:
     - { name: items_committed, unit: count }
-    # The number this report exists for. Some slip is honest; a plan that
-    # slips a quarter of itself was not a plan.
     - { name: items_slipped, unit: count, window: 30d, target: 3, direction: above }
     - { name: effort_committed, unit: days }
     - { name: confidence_pct, unit: percent, target: 70, direction: below }
@@ -65,9 +46,6 @@ facets:
     sparkline: committed_trend
     headline: "{{items_committed}} committed, {{items_slipped}} slipped, {{confidence_pct}}% confidence"
   plan:
-    # A subset of the library's shared flow vocabulary (see
-    # contracts/facets.yaml): aligned columns are what let several
-    # plans aggregate into one board at a wide scope.
     states: [proposed, committed, in_progress, done]
     lanes: [product, platform, operations, compliance]
     horizons: [now, next, later]

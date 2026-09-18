@@ -11,17 +11,14 @@ import (
 	"time"
 )
 
-// countingSource is a fake TokenSource that mints a new token with a short
-// TTL on every fetch, tagging each with an increasing sequence number so
-// tests can observe rotation.
 type countingSource struct {
-	ttl  time.Duration
-	n    int64
-	fail atomic.Bool // when true, FetchToken returns an error once then clears itself
+	ttl           time.Duration
+	n             int64
+	failNextFetch atomic.Bool
 }
 
 func (s *countingSource) FetchToken(_ context.Context) (Token, error) {
-	if s.fail.CompareAndSwap(true, false) {
+	if s.failNextFetch.CompareAndSwap(true, false) {
 		return Token{}, fmt.Errorf("injected failure")
 	}
 	n := atomic.AddInt64(&s.n, 1)
@@ -67,9 +64,6 @@ func TestWorkerClientBackgroundRefreshSwapsBeforeExpiry(t *testing.T) {
 		t.Fatalf("first token = %q, want token-1", first.Raw)
 	}
 
-	// Poll for up to ~500ms (well past several TTL windows), asserting
-	// the client never hands back an expired token and that it does
-	// rotate to a new token before the old one would expire.
 	deadline := time.Now().Add(500 * time.Millisecond)
 	sawRotation := false
 	for time.Now().Before(deadline) {
@@ -108,14 +102,9 @@ func TestWorkerClientConcurrentCallersNeverSeeExpiredToken(t *testing.T) {
 	}
 	defer c.Stop()
 
-	// Readers pace themselves slightly instead of pure-spinning: enough
-	// concurrent access to exercise the atomic swap under -race, without
-	// starving the background refresh goroutine of CPU time on small
-	// runners (a busy-spin here can delay the refresh goroutine past the
-	// token's expiry, which is a test-harness artifact, not a client bug
-	// — real deployments use minute-scale TTLs with ample margin).
 	const numReaders = 8
 	const readDuration = 600 * time.Millisecond
+	const readerPauseSoRefreshGoroutineGetsCPU = 200 * time.Microsecond
 
 	var wg sync.WaitGroup
 	var expiredSeen atomic.Bool
@@ -138,7 +127,7 @@ func TestWorkerClientConcurrentCallersNeverSeeExpiredToken(t *testing.T) {
 				if tok.Expired(time.Now()) {
 					expiredSeen.Store(true)
 				}
-				time.Sleep(200 * time.Microsecond)
+				time.Sleep(readerPauseSoRefreshGoroutineGetsCPU)
 			}
 		}()
 	}
@@ -181,10 +170,7 @@ func TestWorkerClientRefreshErrorIsRetried(t *testing.T) {
 	}
 	defer c.Stop()
 
-	// Inject a single failure into the background refresh cycle and
-	// confirm the client recovers (keeps refreshing) rather than getting
-	// stuck.
-	source.fail.Store(true)
+	source.failNextFetch.Store(true)
 
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for errCount.Load() == 0 && time.Now().Before(deadline) {
@@ -194,7 +180,6 @@ func TestWorkerClientRefreshErrorIsRetried(t *testing.T) {
 		t.Fatal("injected refresh failure was never observed")
 	}
 
-	// The client should keep making progress after the transient error.
 	before, _ := c.Token()
 	deadline = time.Now().Add(500 * time.Millisecond)
 	for time.Now().Before(deadline) {

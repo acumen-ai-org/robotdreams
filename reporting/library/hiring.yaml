@@ -1,12 +1,3 @@
-# Report template: hiring — what talent acquisition is actually doing.
-# A recruiting team's week is a pipeline, not a deploy log: requisitions
-# open, candidates move through a loop, offers go out, and some of them
-# come back signed. Categorised as delivery (an accepted offer is
-# shipped work) and roadmap (an open req is a plan with a date on it).
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: hiring
@@ -20,9 +11,6 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # Counts sum; rates do not. Adding two teams' acceptance
-    # percentages together is the single easiest way to publish a
-    # number nobody can act on.
     kpis:
       open_reqs: sum
       offers_out: sum
@@ -37,12 +25,7 @@ data:
   kpis:
     - { name: open_reqs, unit: count, window: 7d }
     - { name: offers_out, unit: count, window: 7d }
-    # Industry-standard offer acceptance sits in the high eighties;
-    # below that the level, the package or the loop is the problem.
     - { name: offer_accept_pct, unit: percent, window: 7d, target: 88, direction: below }
-    # Time to fill is the number a hiring manager actually feels.
-    # Forty-five days is a normal commitment for a mixed-seniority
-    # requisition set; exec search is always longer and always excused.
     - { name: time_to_fill_days, unit: days, window: 90d, target: 45, direction: above }
     - { name: hires, unit: count, window: 7d }
     - { name: pipeline_candidates, unit: count, window: 7d }
@@ -56,16 +39,10 @@ data:
     - { type: offer.declined, severity: warn }
     - { type: req.aged, severity: warn }
   tables:
-    # Applied -> screened -> onsite -> offer -> hired. The drop between
-    # any two stages is the only honest way to read a pipeline: a
-    # single-digit percentage of applicants ever sees an offer, and a
-    # funnel that hides that is a recruiting brochure, not a report.
     - name: hiring_funnel
       columns: [stage, count]
     - name: open_reqs_by_function
       columns: [function, open_reqs, days_open]
-    # The requisitions past their SLA, and nothing else — this is the
-    # part a head of talent works from on a Monday.
     - name: aging_reqs
       columns: [req, function, hiring_manager, days_open, stage]
     - name: recent_offers
@@ -81,8 +58,6 @@ facets:
     headline: "{{open_reqs}} open reqs, {{hires}} hires this week at {{offer_accept_pct}}% acceptance"
   timeline:
     events: [req.opened, offer.extended, offer.accepted, offer.declined, req.aged]
-    # A requisition is a span, not a point: it opens, and much later
-    # somebody signs.
     spans:
       - { name: requisition, start: req.opened, end: offer.accepted }
     milestones: [offer.accepted]

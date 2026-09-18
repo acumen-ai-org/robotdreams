@@ -1,16 +1,3 @@
-# Report template: task-board — a team's work in flight.
-#
-# The operational plan: not what we intend over a quarter, but what is on
-# the board right now, how much of it is moving, and where it is stuck.
-# Categorised roadmap AND delivery, because a board is the join between
-# the two — it is the plan at the altitude where it becomes shipping.
-#
-# Attaches at a site only. A board belongs to the team that stands in
-# front of it; a realm-level board is a roll-up, not a thing anyone runs.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: task-board
@@ -24,9 +11,6 @@ scope:
   aggregation:
     status: worst
     headline: synthesize
-    # Counts sum. Cycle time is a duration and takes a p50 when rolled up:
-    # adding the time two squads' cards took produces a number nothing
-    # experienced.
     kpis:
       items_in_flight: sum
       items_blocked: sum
@@ -39,8 +23,6 @@ scope:
 data:
   kpis:
     - { name: items_in_flight, unit: count }
-    # Blocked is the number the board is read for, so it carries the
-    # target that makes it an answer rather than an observation.
     - { name: items_blocked, unit: count, target: 0, direction: above }
     - { name: items_done, unit: count, window: 7d }
     - { name: cycle_time_days, unit: days, target: 5, direction: above }
@@ -66,20 +48,11 @@ facets:
     sparkline: remaining_trend
     headline: "{{items_in_flight}} in flight, {{items_blocked}} blocked, {{cycle_time_days}}d cycle time"
   plan:
-    # The shared flow vocabulary, with review — the column work goes to
-    # wait in — as the step only a working board needs.
     states: [proposed, committed, in_progress, review, done]
     lanes: [feature, defect, chore]
     commitments: [committed, planned]
     levels: [task, subtask]
     size_unit: points
-    # Per team, set where a squad of six actually sits rather than where
-    # it would like to: a limit everyone breaches every day is not a
-    # limit, it is a complaint, and the column would stop being a signal.
-    # Review is the tightest because review is where work goes to wait.
-    #
-    # Proposed and done are unbounded on purpose: a limit on the intake
-    # is a filing rule, and a limit on done is nothing at all.
     wip_limits: { committed: 8, in_progress: 6, review: 5 }
     baseline: { name: Sprint commitment, ref: series/remaining_trend }
   timeline:

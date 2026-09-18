@@ -1,18 +1,3 @@
-# Report definition: catalog — what content came in, and whether it is
-# fit to publish. The counterpart to licensing: licensing says what we
-# are ALLOWED to carry, catalog says what actually arrived and how much
-# of it was usable. Produced by the teams that receive deliveries —
-# label relations, publishing rights, publisher partnerships, and the
-# editorial teams that live off the same feed.
-#
-# Magnitudes are anchored to the real thing: a catalogue on the order of
-# 100M tracks, with well over 100k new tracks arriving every day across
-# the industry. Each team reports its share, so the shares sum back to
-# the company total rather than each restating it.
-#
-# Register with:
-#   dream server --reports reporting/library/
-
 version: v1alpha1
 kind: ReportDefinition
 name: catalog
@@ -27,14 +12,10 @@ scope:
     status: worst
     headline: synthesize
     kpis:
-      # Volumes sum: two teams' deliveries really are one company's
-      # deliveries, and the shares are cut so they reconcile.
       tracks_ingested: sum
       ingestion_failures: sum
       takedowns: sum
       catalog_size: sum
-      # Coverage percentages average. Summing them would claim a
-      # 200%-complete catalogue from two 100% teams.
       metadata_completeness_pct: avg
       rights_coverage_pct: avg
     timeline: merge
@@ -44,12 +25,8 @@ data:
   kpis:
     - { name: tracks_ingested, unit: count, window: 24h }
     - { name: ingestion_failures, unit: count, window: 24h }
-    # 98% is the working bar for a track to be publishable without a
-    # human touching it: title, ISRC, contributors, artwork, territory.
     - { name: metadata_completeness_pct, unit: percent, target: 98, direction: below }
     - { name: takedowns, unit: count, window: 24h }
-    # Anything published without clear rights is a legal exposure, so
-    # the commitment is close to total rather than merely high.
     - { name: rights_coverage_pct, unit: percent, target: 99.5, direction: below }
     - { name: catalog_size, unit: count }
   series:
@@ -60,26 +37,17 @@ data:
     - { type: takedown.received, severity: warn }
     - { type: rights.gap, severity: critical }
   tables:
-    # Where does it leak: everything delivered, what survived
-    # validation, what actually reached listeners. Stage-and-count rows
-    # in process order.
     - name: ingest_stages
       columns: [stage, count]
-    # Ranking is the comparison, so it is done for the reader: which
-    # label, aggregator or publisher is sending us the volume.
     - name: tracks_by_source
       columns: [source, tracks]
     - name: recent_takedowns
       columns: [when, title, rights_holder, territory, reason]
-    # One row per contributing team, so a department roll-up ranks the
-    # teams beneath it with no extra aggregation rule.
     - name: tracks_by_unit
       columns: [unit, tracks_ingested]
 
 facets:
   summary:
-    # Volume is not the risk — unusable metadata is, because it is what
-    # stops a track being findable or payable.
     status: { from: metadata_completeness_pct, warn_at: 96, critical_at: 90, direction: below }
     kpis: [tracks_ingested, ingestion_failures, metadata_completeness_pct, rights_coverage_pct]
     sparkline: ingest_rate

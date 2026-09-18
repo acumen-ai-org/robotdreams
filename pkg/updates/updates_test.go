@@ -63,8 +63,6 @@ func TestValidateStatus(t *testing.T) {
 		{StatusDeclined, false},
 		{StatusFailed, false},
 
-		// Synthesized by the control plane; a node cannot assert its own
-		// silence.
 		{StatusUnknown, true},
 		{"", true},
 		{"APPLIED", true},
@@ -95,7 +93,7 @@ func TestValidateSeverity(t *testing.T) {
 		severity string
 		wantErr  bool
 	}{
-		{"", false}, // unstated is legal
+		{"", false},
 		{SeverityOptional, false},
 		{SeverityRecommended, false},
 		{SeverityRequired, false},
@@ -121,11 +119,7 @@ func TestValidateSeverity(t *testing.T) {
 	}
 }
 
-// TestAnnouncementWireFormat asserts the LITERAL JSON, field name by field
-// name. This is a wire contract that node runtimes in other languages
-// parse, so a struct-tag typo has to fail loudly here; a marshal/unmarshal
-// round-trip would happily agree with itself and catch nothing.
-func TestAnnouncementWireFormat(t *testing.T) {
+func TestAnnouncementLiteralWireFormat(t *testing.T) {
 	ann := Announcement{
 		ID:          "4b0f2c9d1e7a4f38b6c2d5e1a9078f34",
 		Kind:        KindCLI,
@@ -156,9 +150,6 @@ func TestAnnouncementWireFormat(t *testing.T) {
 	}
 }
 
-// TestAnnouncementOmitsOptionalFields pins which fields disappear when
-// unset: a node reading the contract must not have to distinguish "absent"
-// from "empty" for the required ones.
 func TestAnnouncementOmitsOptionalFields(t *testing.T) {
 	got, err := json.Marshal(Announcement{
 		ID:          "id1",
@@ -195,7 +186,6 @@ func TestReportWireFormat(t *testing.T) {
 		t.Fatalf("report JSON drifted from the contract\n got: %s\nwant: %s", got, want)
 	}
 
-	// A bare version declaration carries no announcement.
 	got, err = json.Marshal(Report{Kind: KindCLI, Status: StatusCurrent, CurrentVersion: "0.4.2"})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -206,11 +196,7 @@ func TestReportWireFormat(t *testing.T) {
 	}
 }
 
-// TestOpaqueVersionStrings is the executable form of "Robot Dreams never
-// interprets a version": a deployment may version by semver, by date, by
-// git describe, or by a bare integer, and every one must survive
-// byte-identically.
-func TestOpaqueVersionStrings(t *testing.T) {
+func TestVersionStringsSurviveByteIdentically(t *testing.T) {
 	versions := []string{
 		"0.4.2",
 		"v4",

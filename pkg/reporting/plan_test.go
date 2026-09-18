@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// planDef is a definition exposing a plan facet, used across these tests.
 func planDef() *Definition {
 	return &Definition{
 		Version:    DefinitionVersion,
@@ -40,8 +39,6 @@ func planDef() *Definition {
 
 func item(id, state string) Item { return Item{ID: id, Title: id, State: state} }
 
-// validateDef runs the same two passes ParseDefinition does, joined, so a
-// test can assert on any problem either of them reports.
 func validateDef(d *Definition) error {
 	problems := d.validateCore()
 	if len(problems) == 0 {
@@ -59,8 +56,7 @@ func TestPlanFacetNamesLast(t *testing.T) {
 	if len(got) != 1 || got[0] != "plan" {
 		t.Fatalf("FacetNames = %v, want [plan]", got)
 	}
-	// A definition with several facets must still report `plan` last, so
-	// every existing consumer sees the same prefix it always did.
+
 	d.Facets.Summary = &SummaryFacet{KPIs: []string{"committed"}}
 	d.Facets.Timeline = &TimelineFacet{Events: []string{}}
 	if got := d.FacetNames(); got[len(got)-1] != "plan" {
@@ -122,8 +118,7 @@ func TestPanelItemsRefNeedsPlanFacet(t *testing.T) {
 	if err := validateDef(d); err != nil {
 		t.Fatalf("items panel with a plan facet should validate: %v", err)
 	}
-	// The same panel on a definition with no plan is a dangling reference,
-	// exactly like naming a table that does not exist.
+
 	d.Facets.Plan = nil
 	d.Scope.Aggregation.Items = ""
 	err := validateDef(d)
@@ -214,7 +209,6 @@ func TestValidateInstanceItems(t *testing.T) {
 		}
 	})
 
-	// Exhaustive, not fail-fast: the package's established posture.
 	t.Run("every fault is reported", func(t *testing.T) {
 		in := base()
 		in.Items = []Item{
@@ -229,8 +223,6 @@ func TestValidateInstanceItems(t *testing.T) {
 		}
 	})
 }
-
-// --- aggregation ----------------------------------------------------------
 
 func planInstance(scope string, at time.Time, items ...Item) *Instance {
 	return &Instance{Definition: "task-board", Scope: scope, ProducedAt: at, Items: items}
@@ -256,7 +248,7 @@ func TestAggregatePlanMergeStampsAndOrders(t *testing.T) {
 	if view.Total != 3 || view.Instances != 2 {
 		t.Fatalf("Total=%d Instances=%d, want 3 and 2", view.Total, view.Instances)
 	}
-	// Every declared column is present, in declared order, even when empty.
+
 	wantCols := []string{"backlog", "doing", "review", "done"}
 	if len(view.States) != len(wantCols) {
 		t.Fatalf("got %d columns, want %d", len(view.States), len(wantCols))
@@ -271,11 +263,11 @@ func TestAggregatePlanMergeStampsAndOrders(t *testing.T) {
 			t.Fatalf("item %q not origin-stamped: %+v", it.ID, it)
 		}
 	}
-	// A done card is a record, not a plan: it sorts last.
+
 	if view.Items[len(view.Items)-1].ID != "b" {
 		t.Fatalf("terminal item should sort last, got order %v", ids(view.Items))
 	}
-	// WIP limits multiply out across contributors.
+
 	if col := column(view, "doing"); col.Limit != 6 {
 		t.Fatalf("doing limit = %d, want 6 (3 x 2 contributors)", col.Limit)
 	}
@@ -315,7 +307,7 @@ func TestAggregatePlanCountsSurviveBounding(t *testing.T) {
 	if !view.Truncated {
 		t.Error("Truncated should be set when cards were dropped")
 	}
-	// Keep-order: the blocked card is the one a reader must act on.
+
 	if view.Items[0].ID != "blocked" {
 		t.Fatalf("kept %q, want the blocked card", view.Items[0].ID)
 	}

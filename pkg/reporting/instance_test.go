@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// testDef is a hand-built definition shared by instance and aggregation
-// tests, shaped like the delivery template.
 func testDef() *Definition {
 	return &Definition{
 		Version:     DefinitionVersion,

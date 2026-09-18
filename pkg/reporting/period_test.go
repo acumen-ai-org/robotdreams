@@ -33,10 +33,6 @@ func TestParsePeriodKind(t *testing.T) {
 	}
 }
 
-// TestPeriodAtGoldens pins the boundaries for every kind at a few
-// instants, in UTC. Sunday 2026-09-13 is the interesting weekday: a
-// Sunday-based week would start it on itself, an ISO week puts it at the
-// end of the week that started Monday the 7th.
 func TestPeriodAtGoldens(t *testing.T) {
 	cases := []struct {
 		kind       PeriodKind
@@ -45,12 +41,12 @@ func TestPeriodAtGoldens(t *testing.T) {
 	}{
 		{PeriodDay, "2026-09-13T23:59:59Z", "2026-09-13T00:00:00Z", "2026-09-14T00:00:00Z"},
 		{PeriodDay, "2026-09-13T00:00:00Z", "2026-09-13T00:00:00Z", "2026-09-14T00:00:00Z"},
-		{PeriodWeek, "2026-09-13T12:00:00Z", "2026-09-07T00:00:00Z", "2026-09-14T00:00:00Z"}, // Sunday
-		{PeriodWeek, "2026-09-14T00:00:00Z", "2026-09-14T00:00:00Z", "2026-09-21T00:00:00Z"}, // Monday
-		{PeriodWeek, "2026-09-16T09:30:00Z", "2026-09-14T00:00:00Z", "2026-09-21T00:00:00Z"}, // Wednesday
-		{PeriodWeek, "2026-01-01T00:00:00Z", "2025-12-29T00:00:00Z", "2026-01-05T00:00:00Z"}, // week across a year end
+		{PeriodWeek, "2026-09-13T12:00:00Z", "2026-09-07T00:00:00Z", "2026-09-14T00:00:00Z"},
+		{PeriodWeek, "2026-09-14T00:00:00Z", "2026-09-14T00:00:00Z", "2026-09-21T00:00:00Z"},
+		{PeriodWeek, "2026-09-16T09:30:00Z", "2026-09-14T00:00:00Z", "2026-09-21T00:00:00Z"},
+		{PeriodWeek, "2026-01-01T00:00:00Z", "2025-12-29T00:00:00Z", "2026-01-05T00:00:00Z"},
 		{PeriodMonth, "2026-02-14T00:00:00Z", "2026-02-01T00:00:00Z", "2026-03-01T00:00:00Z"},
-		{PeriodMonth, "2024-02-29T00:00:00Z", "2024-02-01T00:00:00Z", "2024-03-01T00:00:00Z"}, // leap day
+		{PeriodMonth, "2024-02-29T00:00:00Z", "2024-02-01T00:00:00Z", "2024-03-01T00:00:00Z"},
 		{PeriodMonth, "2026-12-31T23:00:00Z", "2026-12-01T00:00:00Z", "2027-01-01T00:00:00Z"},
 		{PeriodQuarter, "2026-01-15T00:00:00Z", "2026-01-01T00:00:00Z", "2026-04-01T00:00:00Z"},
 		{PeriodQuarter, "2026-03-31T23:59:59Z", "2026-01-01T00:00:00Z", "2026-04-01T00:00:00Z"},
@@ -78,7 +74,6 @@ func TestPeriodAtGoldens(t *testing.T) {
 	}
 }
 
-// A nil location is UTC.
 func TestPeriodAtNilLocation(t *testing.T) {
 	at := time.Date(2026, 9, 13, 12, 0, 0, 0, time.FixedZone("x", 3600))
 	got := PeriodAt(PeriodDay, at, nil)
@@ -87,13 +82,9 @@ func TestPeriodAtNilLocation(t *testing.T) {
 	}
 }
 
-// Boundaries are wall-clock boundaries in the location, so the same
-// instant lands in different days on either side of a date line — and
-// a day in Stockholm starts at 22:00 UTC the evening before.
 func TestPeriodAtNonUTCLocation(t *testing.T) {
 	stockholm := mustLoc(t, "Europe/Stockholm")
-	// 23:30 in Stockholm on Sunday the 13th is 21:30Z; UTC still says
-	// Sunday, but Stockholm's Monday-start week must not have begun.
+
 	at := time.Date(2026, 9, 13, 21, 30, 0, 0, time.UTC)
 
 	day := PeriodAt(PeriodDay, at, stockholm)
@@ -104,8 +95,6 @@ func TestPeriodAtNonUTCLocation(t *testing.T) {
 		t.Errorf("day.End = %v, want %v (Stockholm midnight, CEST)", day.End, want)
 	}
 
-	// Ten minutes past Stockholm midnight is still Sunday in UTC but
-	// Monday the 14th in Stockholm: a new day AND a new ISO week.
 	later := time.Date(2026, 9, 13, 22, 10, 0, 0, time.UTC)
 	if PeriodAt(PeriodDay, later, time.UTC).Start.Day() != 13 {
 		t.Errorf("UTC day should still be the 13th")
@@ -121,19 +110,15 @@ func TestPeriodAtNonUTCLocation(t *testing.T) {
 		t.Errorf("week starts on %v, want Monday", week.Start.Weekday())
 	}
 
-	// A fixed offset, which is what an RFC 3339 `at` carries.
 	plus2 := time.FixedZone("+02:00", 2*3600)
 	if got := PeriodAt(PeriodMonth, later, plus2); got.Start.Month() != time.September || got.Start.Day() != 1 || got.Start.Location() != plus2 {
 		t.Errorf("fixed-offset month.Start = %v", got.Start)
 	}
 }
 
-// A day across a daylight-saving change is 23 or 25 hours long, and the
-// boundaries are still local midnights.
 func TestPeriodAtDSTCrossingDay(t *testing.T) {
 	stockholm := mustLoc(t, "Europe/Stockholm")
 
-	// 2026-03-29: clocks go forward at 02:00 CET -> 03:00 CEST.
 	spring := PeriodAt(PeriodDay, time.Date(2026, 3, 29, 12, 0, 0, 0, stockholm), stockholm)
 	if d := spring.End.Sub(spring.Start); d != 23*time.Hour {
 		t.Errorf("spring-forward day is %v long, want 23h", d)
@@ -145,14 +130,11 @@ func TestPeriodAtDSTCrossingDay(t *testing.T) {
 		t.Errorf("spring.End is not local midnight: %v", spring.End)
 	}
 
-	// 2026-10-25: clocks go back at 03:00 CEST -> 02:00 CET.
 	fall := PeriodAt(PeriodDay, time.Date(2026, 10, 25, 12, 0, 0, 0, stockholm), stockholm)
 	if d := fall.End.Sub(fall.Start); d != 25*time.Hour {
 		t.Errorf("fall-back day is %v long, want 25h", d)
 	}
 
-	// The week and month containing the change are still bounded at
-	// local midnights on the right dates, and the periods chain.
 	week := PeriodAt(PeriodWeek, time.Date(2026, 3, 29, 12, 0, 0, 0, stockholm), stockholm)
 	if week.Start.Day() != 23 || week.End.Day() != 30 || week.Start.Weekday() != time.Monday {
 		t.Errorf("DST week = %v", week)
@@ -185,13 +167,12 @@ func TestPeriodPreviousNextContains(t *testing.T) {
 		if p.Contains(p.End.Add(-time.Nanosecond)) != true {
 			t.Errorf("%s: the last nanosecond is inside", kind)
 		}
-		// Stepping back and forward lands on the same period.
+
 		if back := next.Previous(); !back.Start.Equal(p.Start) || !back.End.Equal(p.End) {
 			t.Errorf("%s: Next().Previous() = %v, want %v", kind, back, p)
 		}
 	}
 
-	// Quarter and year steps cross year ends.
 	q1 := PeriodAt(PeriodQuarter, time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), time.UTC)
 	if prev := q1.Previous(); prev.Start.Year() != 2025 || prev.Start.Month() != time.October {
 		t.Errorf("Q1.Previous() = %v, want Q4 2025", prev)
@@ -206,5 +187,14 @@ func TestPeriodString(t *testing.T) {
 	p := PeriodAt(PeriodWeek, time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC), time.UTC)
 	if got, want := p.String(), "week 2026-09-07T00:00:00Z..2026-09-14T00:00:00Z"; got != want {
 		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
+func TestPeriodAtUnknownKindIsDay(t *testing.T) {
+	at := time.Date(2026, 9, 8, 15, 0, 0, 0, time.UTC)
+	got := PeriodAt(PeriodKind("fortnight"), at, time.UTC)
+	want := PeriodAt(PeriodDay, at, time.UTC)
+	if got != want {
+		t.Fatalf("PeriodAt(unknown) = %v, want the day %v", got, want)
 	}
 }

@@ -1,21 +1,7 @@
-# Aggregation policies and the scope contract: how N report instances
-# below a scope become one view at that scope. A ReportDefinition
-# declares a policy per facet / per field; a consumer needs only the
-# policy and the instances beneath — never knowledge of what the report
-# means. If rolling a report up requires report-specific code, the
-# scope contract has leaked.
-#
-# Scope paths are labels, not enforced containers (see
-# docs/vision/organization.md): an instance carries a path like
-#   <universe>/<world>/<realm>/<site>
-# with as much or as little depth as the deployment uses.
-
 version: v1alpha1
 kind: AggregationPolicies
 
 scope_levels:
-  # Advisory names for path depth 1..4. A deployment may rename them;
-  # depth is what the code operates on.
   - universe
   - world
   - realm
@@ -74,28 +60,8 @@ policies:
       or template engine behind the deployment; MUST degrade to top(1)
       when none is available — degradation is explicit, never silent).
 
-# How a bounded plan chooses which cards to keep. Fixed, and derived only
-# from what the plan facet DECLARES — never from what an item is about,
-# which is the same rule every other policy here obeys:
-#
-#   1. terminal-state items last  (a done card is a record, not a plan)
-#   2. blocked before unblocked   (the cards a reader must act on)
-#   3. strongest commitment first, in the declared order
-#   4. soonest due first; no due date sorts last
-#   5. earliest declared state, then origin scope, then id
-#
-# The last three keys make the order total, so two consumers bounding the
-# same board drop the same cards.
 item_keep_order: [terminal_last, blocked_first, commitment, due, state, scope, id]
 
-# The time stage. A definition may declare, under
-# scope.aggregation.time, how ONE scope path's instances fold over a
-# period (day|week|month|quarter|year, asked for on the read API) before
-# the scope policies above roll the paths up. Same policy vocabulary, a
-# separate declaration, because the two questions differ: a counter
-# sums both over a week and across sites, a gauge sums across sites but
-# reads `latest` over a week. Without a period the stage is "newest per
-# path", which is what every reader saw before the stage existed.
 time:
   status: { applies: [worst, latest], default: worst }
   headline: { applies: [latest, top, synthesize], default: latest }
