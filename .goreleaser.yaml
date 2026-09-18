@@ -51,3 +51,7 @@ snapshot:
 
 changelog:
   use: github-native
+
+release:
+  mode: keep-existing
+  replace_existing_artifacts: true
