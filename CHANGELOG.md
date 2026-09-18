@@ -6,6 +6,13 @@ from the Conventional Commits merged to `main`; the project adheres to
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
+## [0.1.3](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.2...v0.1.3) (2026-09-18)
+
+
+### Bug Fixes
+
+* **release:** re-runs replace assets; the npm manifest tracks the tag ([08ed004](https://github.com/acumen-ai-org/robotdreams/commit/08ed004b035078a1c3a4eef3c1940a699b967671))
+
 ## [0.1.2](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.1...v0.1.2) (2026-09-18)
 
 
