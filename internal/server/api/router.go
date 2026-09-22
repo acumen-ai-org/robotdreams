@@ -20,6 +20,7 @@ func NewAPIRouter(a *API) http.Handler {
 
 	mux.HandleFunc("GET /api/workers", a.withAuth(a.handleListWorkers))
 	mux.HandleFunc("GET /api/workers/{id}", a.withAuth(a.handleGetWorker))
+	mux.HandleFunc("PATCH /api/workers/{id}", a.withAuth(a.handleEditWorker))
 	mux.HandleFunc("POST /api/workers/{id}/reassign", a.withAuth(a.handleReassign))
 	mux.HandleFunc("POST /api/workers/{id}/revoke", a.withAuth(a.handleRevoke))
 	mux.HandleFunc("POST /api/workers/delegate", a.withAuth(a.handleDelegate))

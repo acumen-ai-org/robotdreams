@@ -109,6 +109,18 @@ func (g *Graph) Reassign(workerID, newParent string) error {
 	return nil
 }
 
+func (g *Graph) SetRole(workerID, role string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	w, ok := g.workers[workerID]
+	if !ok {
+		return fmt.Errorf("orgchart: set role of %q: %w", workerID, ErrNotFound)
+	}
+	w.Role = role
+	return nil
+}
+
 func (g *Graph) hasAncestorLocked(start *Worker, ancestorID string) bool {
 	for cur := start; cur != nil && cur.ReportsTo != ""; {
 		if cur.ReportsTo == ancestorID {

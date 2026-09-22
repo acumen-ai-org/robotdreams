@@ -198,3 +198,35 @@ func TestUpdatesPendingRolloutContractCommandOutput(t *testing.T) {
 		t.Fatalf("contract command output differs from printUpdateContract")
 	}
 }
+
+func TestWorkerEditCommandOutput(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	addr, _ := startTestServer(t)
+	connectPair(t, addr)
+
+	out := mustRunDreamCmd(t, "worker", "edit", "leaf", "--server", addr, "--worker-id", "leaf", "--role", "architect")
+	if strings.TrimSpace(out) != "leaf is now architect" {
+		t.Fatalf("edit output = %q", out)
+	}
+	out = mustRunDreamCmd(t, "worker", "edit", "leaf", "--server", addr, "--worker-id", "lead", "--role", "")
+	if strings.TrimSpace(out) != "leaf is now -" {
+		t.Fatalf("cleared role output = %q", out)
+	}
+	out = mustRunDreamCmd(t, "node", "edit", "leaf", "--server", addr, "--worker-id", "leaf", "--role", "architect")
+	if strings.TrimSpace(out) != "leaf is now architect" {
+		t.Fatalf("node alias output = %q", out)
+	}
+
+	if _, err := runDreamCmd(t, "worker", "edit", "leaf", "--server", addr, "--worker-id", "leaf"); err == nil ||
+		!strings.Contains(err.Error(), "nothing to edit: pass --role") {
+		t.Fatalf("missing --role: %v", err)
+	}
+	if _, err := runDreamCmd(t, "worker", "edit", "lead", "--server", addr, "--worker-id", "leaf", "--role", "principal"); err == nil ||
+		!strings.Contains(err.Error(), "HTTP 403") {
+		t.Fatalf("a child editing its parent: %v", err)
+	}
+	if _, err := runDreamCmd(t, "worker", "edit", "ghost", "--server", addr, "--worker-id", "leaf", "--role", "architect"); err == nil ||
+		!strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("editing an unknown worker: %v", err)
+	}
+}

@@ -114,6 +114,7 @@ func (h *eventHub) subscriberCount() int {
 }
 
 type orgSnapshot struct {
+	role      string
 	reportsTo string
 	status    orgchart.Status
 }
@@ -161,7 +162,14 @@ func (s *serverPollState) pollWorkersLocked() []sseEvent {
 	for _, w := range current {
 		seen[w.ID] = true
 		prev, existed := s.workers[w.ID]
-		snap := orgSnapshot{reportsTo: w.ReportsTo, status: w.Status}
+		snap := orgSnapshot{role: w.Role, reportsTo: w.ReportsTo, status: w.Status}
+		if existed && prev.role != snap.role {
+			events = append(events, sseEvent{Type: "worker_role_changed", Data: map[string]any{
+				"worker_id": w.ID,
+				"old_role":  prev.role,
+				"new_role":  snap.role,
+			}})
+		}
 		switch {
 		case !existed:
 			if s.initialized {

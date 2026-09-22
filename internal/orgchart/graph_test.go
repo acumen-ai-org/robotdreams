@@ -490,3 +490,59 @@ func TestConcurrentAccess(t *testing.T) {
 		t.Fatalf("graph unusable after concurrent access: %v", err)
 	}
 }
+
+func TestSetRole(t *testing.T) {
+	tests := []struct {
+		name    string
+		worker  string
+		role    string
+		wantErr error
+	}{
+		{name: "relabels a worker", worker: "lead-a1", role: "architect"},
+		{name: "clears a role", worker: "lead-a1", role: ""},
+		{name: "relabels a root", worker: "director", role: "principal"},
+		{name: "unknown worker rejected", worker: "ghost", role: "architect", wantErr: ErrNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := fixtureGraph(t)
+
+			err := g.SetRole(tt.worker, tt.role)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("SetRole error = %v, want errors.Is(..., %v)", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("SetRole: unexpected error: %v", err)
+			}
+
+			got, err := g.Get(tt.worker)
+			if err != nil {
+				t.Fatalf("Get: %v", err)
+			}
+			if got.Role != tt.role {
+				t.Errorf("Role = %q, want %q", got.Role, tt.role)
+			}
+			if got.ReportsTo != "" && got.ReportsTo != "director" && got.ReportsTo != "manager-a" {
+				t.Errorf("SetRole moved the worker: ReportsTo = %q", got.ReportsTo)
+			}
+		})
+	}
+}
+
+func TestSetRoleLeavesSiblingsAlone(t *testing.T) {
+	g := fixtureGraph(t)
+	if err := g.SetRole("lead-a1", "architect"); err != nil {
+		t.Fatalf("SetRole: %v", err)
+	}
+	sibling, err := g.Get("lead-a2")
+	if err != nil {
+		t.Fatalf("Get(lead-a2): %v", err)
+	}
+	if sibling.Role != "test" {
+		t.Errorf("sibling Role = %q, want the untouched fixture role", sibling.Role)
+	}
+}

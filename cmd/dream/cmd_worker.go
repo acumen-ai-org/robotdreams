@@ -27,7 +27,7 @@ func newWorkerCmd() *cobra.Command {
 		Aliases: []string{"node"},
 		Short:   "Connect and manage workers (nodes) against a control plane",
 	}
-	cmd.AddCommand(newWorkerConnectCmd(), newWorkerDelegateCmd(), newWorkerReassignCmd(), newWorkerListCmd(), newWorkerOnboardCmd(), newWorkerAppCmd())
+	cmd.AddCommand(newWorkerConnectCmd(), newWorkerDelegateCmd(), newWorkerEditCmd(), newWorkerReassignCmd(), newWorkerListCmd(), newWorkerOnboardCmd(), newWorkerAppCmd())
 	return cmd
 }
 
@@ -221,6 +221,80 @@ func declareVersions(ctx context.Context, baseURL, workerID string, kp identity.
 			fmt.Fprintf(os.Stderr, "warning: could not declare %s version %s: %v\n", kind, v, err)
 		}
 	}
+}
+
+type workerEditOptions struct {
+	Target    string
+	Role      string
+	RoleGiven bool
+	Server    string
+	ServerID  string
+	AsWorker  string
+}
+
+func newWorkerEditCmd() *cobra.Command {
+	var opts workerEditOptions
+
+	cmd := &cobra.Command{
+		Use:   "edit <worker-id>",
+		Short: "Change what a worker is on the org chart",
+		Long: "Change what a worker is on the org chart.\n\n" +
+			"Today the one editable field is --role, the free-form label the control\n" +
+			"plane records and Mission Control draws an icon from. A role is\n" +
+			"otherwise uninterpreted: changing it relabels the node, it does not\n" +
+			"move it or change what it may do.\n\n" +
+			"Until now a role could only be set at `dream worker connect`, and a\n" +
+			"second connect is refused while the worker is registered, so a\n" +
+			"mislabelled node stayed mislabelled. This is the way to correct one.\n\n" +
+			"The call is authenticated as the LOCAL identity selected by --server /\n" +
+			"--server-id / --worker-id, and the control plane allows the edit only\n" +
+			"when the caller is the worker itself, the worker's parent, or holds the\n" +
+			"admin scope — the same rule as `dream worker reassign`.\n\n" +
+			"An empty --role clears the label, which draws the default ⬡ icon.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.Target = args[0]
+			opts.RoleGiven = cmd.Flags().Changed("role")
+			w, err := runWorkerEdit(cmd.Context(), opts)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s is now %s\n", w.ID, orDash(w.Role))
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&opts.Role, "role", "", "new role label; empty clears it")
+	cmd.Flags().StringVar(&opts.Server, "server", "", "control plane address (default: $"+envDreamURL+", else from local config)")
+	cmd.Flags().StringVar(&opts.ServerID, "server-id", "", "local identity directory under ~/.dream to use")
+	cmd.Flags().StringVar(&opts.AsWorker, "worker-id", "", "local worker identity to authenticate as (default: from local config)")
+
+	return cmd
+}
+
+func runWorkerEdit(ctx context.Context, opts workerEditOptions) (workerView, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !opts.RoleGiven {
+		return workerView{}, fmt.Errorf("nothing to edit: pass --role")
+	}
+	target, err := resolveTarget(opts.Server, opts.ServerID, opts.AsWorker)
+	if err != nil {
+		return workerView{}, err
+	}
+	client, err := target.oneShotClient(ctx)
+	if err != nil {
+		return workerView{}, err
+	}
+
+	var out workerView
+	err = client.doJSON(ctx, http.MethodPatch, "/api/workers/"+opts.Target,
+		map[string]string{"role": opts.Role}, &out)
+	if err != nil {
+		return workerView{}, err
+	}
+	return out, nil
 }
 
 type workerReassignOptions struct {

@@ -1199,3 +1199,127 @@ func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
 		t.Fatalf("status %d, want 400; body %s", status, raw)
 	}
 }
+
+func TestEditWorkerRoleOverHTTP(t *testing.T) {
+	cases := []struct {
+		name       string
+		target     string
+		caller     string
+		wantStatus int
+	}{
+		{name: "the worker itself", target: "leaf", caller: "leaf", wantStatus: http.StatusOK},
+		{name: "the current parent", target: "leaf", caller: "lead", wantStatus: http.StatusOK},
+		{name: "an admin", target: "leaf", caller: "", wantStatus: http.StatusOK},
+		{name: "an unrelated worker", target: "leaf", caller: "peer", wantStatus: http.StatusForbidden},
+		{name: "an unknown worker", target: "ghost", caller: "", wantStatus: http.StatusNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newTestEnv(t, nil)
+			lead := e.connect("lead", "lead", "")
+			leaf := e.connect("leaf", "contributor", "lead")
+			peer := e.connect("peer", "contributor", "")
+
+			token := map[string]string{
+				"lead": lead.Token,
+				"leaf": leaf.Token,
+				"peer": peer.Token,
+			}[tc.caller]
+			if tc.caller == "" {
+				token = e.adminToken("mission-control")
+			}
+
+			role := "architect"
+			status, raw := e.do(http.MethodPatch, "/api/workers/"+tc.target, token, editWorkerRequest{Role: &role})
+			if status != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body %s", status, tc.wantStatus, raw)
+			}
+
+			if tc.wantStatus != http.StatusOK {
+				if tc.target == "leaf" {
+					got, err := e.srv.Graph().Get("leaf")
+					if err != nil {
+						t.Fatalf("Get: %v", err)
+					}
+					if got.Role != "contributor" {
+						t.Fatalf("refused edit still changed the role to %q", got.Role)
+					}
+				}
+				return
+			}
+
+			var view workerView
+			decodeInto(t, raw, &view)
+			if view.ID != "leaf" || view.Role != "architect" || view.ReportsTo != "lead" {
+				t.Fatalf("unexpected worker view: %+v", view)
+			}
+			got, err := e.srv.Graph().Get("leaf")
+			if err != nil {
+				t.Fatalf("Get: %v", err)
+			}
+			if got.Role != "architect" {
+				t.Fatalf("leaf role = %q, want architect", got.Role)
+			}
+		})
+	}
+}
+
+func TestEditWorkerWithoutAnEditableFieldRejected(t *testing.T) {
+	e := newTestEnv(t, nil)
+	leaf := e.connect("leaf", "contributor", "")
+
+	status, raw := e.do(http.MethodPatch, "/api/workers/leaf", leaf.Token, map[string]any{})
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body %s", status, raw)
+	}
+	got, err := e.srv.Graph().Get("leaf")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Role != "contributor" {
+		t.Fatalf("empty edit changed the role to %q", got.Role)
+	}
+}
+
+func TestEditWorkerCanClearTheRole(t *testing.T) {
+	e := newTestEnv(t, nil)
+	leaf := e.connect("leaf", "contributor", "")
+
+	cleared := ""
+	status, raw := e.do(http.MethodPatch, "/api/workers/leaf", leaf.Token, editWorkerRequest{Role: &cleared})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", status, raw)
+	}
+	var view workerView
+	decodeInto(t, raw, &view)
+	if view.Role != "" {
+		t.Fatalf("role = %q, want it cleared", view.Role)
+	}
+}
+
+func TestEditWorkerEmitsVisibleControlMessage(t *testing.T) {
+	e := newTestEnv(t, nil)
+	lead := e.connect("lead", "lead", "")
+	e.connect("leaf", "contributor", "lead")
+
+	role := "architect"
+	if status, raw := e.do(http.MethodPatch, "/api/workers/leaf", lead.Token, editWorkerRequest{Role: &role}); status != http.StatusOK {
+		t.Fatalf("edit: status %d, body %s", status, raw)
+	}
+
+	status, raw := e.do(http.MethodGet, "/api/messages?worker_id=lead", lead.Token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("tail: status %d, body %s", status, raw)
+	}
+	var resp struct {
+		Messages []envelopeView `json:"messages"`
+	}
+	decodeInto(t, raw, &resp)
+	if len(resp.Messages) != 1 {
+		t.Fatalf("want 1 control message for the parent, got %d", len(resp.Messages))
+	}
+	if resp.Messages[0].Subject != server.SubjectWorkerRoleChanged || resp.Messages[0].From != server.ControlWorkerID {
+		t.Fatalf("unexpected control message: %+v", resp.Messages[0])
+	}
+}

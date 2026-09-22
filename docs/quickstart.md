@@ -26,7 +26,7 @@ Two conventions apply CLI-wide:
   Precedence: explicit flag > environment variable > local
   auto-discovery. See [setup-guide.md](setup-guide.md).
 - **`node` is an alias for `worker`.** `dream node
-  connect|list|reassign|onboard` work identically to their `dream
+  connect|list|edit|reassign|onboard` work identically to their `dream
   worker ...` forms — "node" is the vision-level term for the same
   entity ([vision/core.md](vision/core.md)); `worker` stays canonical.
 
@@ -244,6 +244,29 @@ Printing a template **installs nothing** — no file is written, no unit is
 registered, nothing is started. It is a document you choose to act on. See
 [templates.md](templates.md) for what that means and why, including the
 security property a message-driven agent node has by design.
+
+## `dream worker edit <worker-id>`
+
+Change what a worker is on the org chart. Today the one editable field
+is `--role`, the free-form label the control plane records and Mission
+Control draws an icon from; a role is otherwise uninterpreted, so
+changing it relabels the node, it does not move it or change what it may
+do. A role could previously only be set at `dream worker connect`, and a
+second connect is refused while the worker is registered — this is the
+way to correct a mislabelled node. Authenticated as the local identity
+selected by `--server`/`--server-id`/`--worker-id`; the control plane
+only allows the call when the caller is the worker itself, the worker's
+parent, or holds the admin scope — the same rule as `reassign`.
+
+```sh
+dream worker edit leaf1 --role reviewer
+dream worker edit leaf1 --role ""   # clear the label (default ⬡ icon)
+```
+
+Prints `<worker-id> is now <role>`, with `-` for a cleared role. Passing
+no `--role` at all is an error: there is nothing to edit.
+
+Flags: `--role`, `--server`, `--server-id`, `--worker-id`.
 
 ## `dream worker reassign <worker-id>`
 

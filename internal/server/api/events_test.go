@@ -171,3 +171,40 @@ func TestEventsEndpointStreamsWorkerConnect(t *testing.T) {
 		t.Fatalf("worker_connected payload = %s, want it to mention worker-live", gotData)
 	}
 }
+
+func TestPollEmitsWorkerRoleChanged(t *testing.T) {
+	e := newTestEnv(t, nil)
+	lead := e.connect("lead", "lead", "")
+	e.connect("leaf", "contributor", "lead")
+
+	state := newServerPollState(&serverDeps{Graph: e.srv.Graph})
+	if got := state.pollWorkersLocked(); len(got) != 0 {
+		t.Fatalf("first poll emitted %d events, want 0", len(got))
+	}
+
+	role := "architect"
+	if status, raw := e.do(http.MethodPatch, "/api/workers/leaf", lead.Token, editWorkerRequest{Role: &role}); status != http.StatusOK {
+		t.Fatalf("edit: status %d, body %s", status, raw)
+	}
+
+	var got sseEvent
+	for _, ev := range state.pollWorkersLocked() {
+		if ev.Type == "worker_role_changed" {
+			got = ev
+		}
+	}
+	if got.Type != "worker_role_changed" {
+		t.Fatal("poll did not emit worker_role_changed after a role change")
+	}
+	data, ok := got.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("event data = %T, want a map", got.Data)
+	}
+	if data["worker_id"] != "leaf" || data["old_role"] != "contributor" || data["new_role"] != "architect" {
+		t.Fatalf("unexpected worker_role_changed payload: %v", data)
+	}
+
+	if evs := state.pollWorkersLocked(); len(evs) != 0 {
+		t.Fatalf("a settled role change kept emitting %d events", len(evs))
+	}
+}

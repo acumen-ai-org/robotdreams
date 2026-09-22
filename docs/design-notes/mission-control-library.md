@@ -116,6 +116,7 @@
 
 - `useEventStream` holds `onEvent` in a ref, and `useLiveState` puts only the stable `traffic.bump` in its handler deps, so a handler change never tears the SSE connection down.
 - `useLiveState` records one activity entry per announcement (not per recipient) and puts worker ids on each entry so the side panel can narrow the feed, since `detail` is a rendered sentence.
+- `useLiveState` treats `worker_role_changed` like any other announcement (an entry plus an `orgVersion` bump) and offers no way to cause one: a role is changed with `dream worker edit`, and the dashboard only ever GETs, so reflecting the change is the whole contract.
 - `useReveal` moves the view to the selection only on arrival (view became visible, or selection changed under it); a view that made the change bumps `quiet`; `reveal` returning false is retried rather than recorded.
 - `useRollout` does not `logout` on 403: the fleet view is admin-only while the rest of the dashboard is not, so it sets `adminOnly` and renders that as a normal state.
 - `useScopes` keys its fetch on the formatted window string, not the object, so a re-render does not refetch.

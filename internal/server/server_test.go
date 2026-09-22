@@ -697,3 +697,155 @@ func TestEnrollmentTokenRotation(t *testing.T) {
 		t.Fatalf("EnrollmentToken() with the file removed = %q, want empty", got)
 	}
 }
+
+func TestSetWorkerRoleAuthorization(t *testing.T) {
+	ctx := context.Background()
+
+	cases := []struct {
+		name     string
+		target   string
+		caller   string
+		isAdmin  bool
+		wantAuth bool
+	}{
+		{name: "the worker itself", target: "leaf", caller: "leaf", wantAuth: true},
+		{name: "the current parent", target: "leaf", caller: "lead", wantAuth: true},
+		{name: "an admin", target: "leaf", caller: "someone", isAdmin: true, wantAuth: true},
+		{name: "an unrelated worker", target: "leaf", caller: "peer", wantAuth: false},
+		{name: "a worker that is not the parent", target: "leaf", caller: "other-lead", wantAuth: false},
+		{name: "a child editing its parent", target: "lead", caller: "leaf", wantAuth: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestServer(t, nil)
+			connect(t, s, "lead", "")
+			connect(t, s, "other-lead", "")
+			connect(t, s, "leaf", "lead")
+			connect(t, s, "peer", "lead")
+
+			err := s.SetWorkerRole(ctx, tc.target, "architect", tc.caller, tc.isAdmin)
+			if tc.wantAuth {
+				if err != nil {
+					t.Fatalf("want the edit allowed, got %v", err)
+				}
+				got, gerr := s.Graph().Get(tc.target)
+				if gerr != nil {
+					t.Fatalf("Get: %v", gerr)
+				}
+				if got.Role != "architect" {
+					t.Fatalf("edit not applied: role = %q", got.Role)
+				}
+				stored, gerr := s.Store().GetWorker(ctx, tc.target)
+				if gerr != nil {
+					t.Fatalf("GetWorker: %v", gerr)
+				}
+				if stored.Role != "architect" {
+					t.Fatalf("edit not persisted: stored role = %q", stored.Role)
+				}
+				return
+			}
+			if !errors.Is(err, ErrNotAuthorized) {
+				t.Fatalf("want ErrNotAuthorized, got %v", err)
+			}
+			got, gerr := s.Graph().Get(tc.target)
+			if gerr != nil {
+				t.Fatalf("Get: %v", gerr)
+			}
+			if got.Role != "contributor" {
+				t.Fatalf("refused edit still mutated the graph: role = %q", got.Role)
+			}
+		})
+	}
+}
+
+func TestSetWorkerRoleEmitsControlMessage(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "lead", "")
+	connect(t, s, "leaf", "lead")
+
+	if err := s.SetWorkerRole(ctx, "leaf", "architect", "lead", false); err != nil {
+		t.Fatalf("SetWorkerRole: %v", err)
+	}
+
+	for _, recipient := range []string{"leaf", "lead"} {
+		msgs, err := s.Messaging().Tail(ctx, messaging.TailFilter{WorkerID: recipient})
+		if err != nil {
+			t.Fatalf("Tail(%q): %v", recipient, err)
+		}
+		if len(msgs) != 1 {
+			t.Fatalf("%q got %d control messages, want 1", recipient, len(msgs))
+		}
+		env := msgs[0]
+		if env.From != ControlWorkerID || env.Subject != SubjectWorkerRoleChanged {
+			t.Fatalf("unexpected control message: from=%q subject=%q", env.From, env.Subject)
+		}
+		if env.Type != messaging.TypeStatusUpdate {
+			t.Fatalf("control message type = %q, want %q", env.Type, messaging.TypeStatusUpdate)
+		}
+		var body map[string]string
+		if err := json.Unmarshal(env.Body, &body); err != nil {
+			t.Fatalf("unmarshal body: %v", err)
+		}
+		if body["worker_id"] != "leaf" || body["old_role"] != "contributor" ||
+			body["new_role"] != "architect" || body["changed_by"] != "lead" {
+			t.Fatalf("unexpected control body: %v", body)
+		}
+	}
+}
+
+func TestSetWorkerRoleOfRootSkipsAbsentParent(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "lead", "")
+
+	if err := s.SetWorkerRole(ctx, "lead", "principal", "lead", false); err != nil {
+		t.Fatalf("SetWorkerRole: %v", err)
+	}
+
+	all, err := s.Messaging().Tail(ctx, messaging.TailFilter{})
+	if err != nil {
+		t.Fatalf("Tail: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("want 1 control message, got %d", len(all))
+	}
+	if all[0].To != "lead" {
+		t.Fatalf("control message addressed to %q, want lead", all[0].To)
+	}
+}
+
+func TestSetWorkerRoleToTheSameRoleIsANoOp(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "lead", "")
+	connect(t, s, "leaf", "lead")
+
+	if err := s.SetWorkerRole(ctx, "leaf", "contributor", "lead", false); err != nil {
+		t.Fatalf("SetWorkerRole: %v", err)
+	}
+
+	all, err := s.Messaging().Tail(ctx, messaging.TailFilter{})
+	if err != nil {
+		t.Fatalf("Tail: %v", err)
+	}
+	if len(all) != 0 {
+		t.Fatalf("an unchanged role announced %d control messages, want 0", len(all))
+	}
+	got, err := s.Graph().Get("leaf")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Role != "contributor" {
+		t.Fatalf("role = %q, want it untouched", got.Role)
+	}
+}
+
+func TestSetWorkerRoleUnknownWorker(t *testing.T) {
+	s := newTestServer(t, nil)
+	err := s.SetWorkerRole(context.Background(), "ghost", "architect", "ghost", true)
+	if !errors.Is(err, orgchart.ErrNotFound) {
+		t.Fatalf("want orgchart.ErrNotFound, got %v", err)
+	}
+}

@@ -83,6 +83,16 @@ reassignment is itself emitted as a control message along the org
 graph, so it's visible in the same activity stream as everything else,
 consistent with core.md's "visible, not opaque."
 
+The label a node carries is correctable the same way:
+
+```
+dream worker edit <worker-id> --role <label>
+```
+
+Same callers, same control message along the org graph. A role is an
+uninterpreted label, so correcting one relabels the node — it does not
+move it or change what it may do.
+
 ## Connectivity is a graph, not a pool
 
 The obvious default is: every worker connects flat to one server, and

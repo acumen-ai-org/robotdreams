@@ -43,6 +43,8 @@
 - `declareVersions`/`declareApp` failures warn on stderr and never fail the connect: a node that cannot advertise a version or app is still a working node.
 - `discoverLocalEnrollmentToken` returns `""` (no error) for a missing or unreadable file, so the server's 401 tells the operator to pass `--admin-token` rather than the CLI failing an open-enrollment dev server locally.
 - `runWorkerAppSet` validates the URL with `server.ValidateAppURL` before dialing, so a typo is reported next to the flag; `TestWorkerAppSetRejectsBadURLBeforeDialing` pins it.
+- `dream worker edit` is a field-agnostic verb rather than a `set-role` command: role is the first editable field, not the last, and a second verb per field would make the surface grow without teaching an operator anything new.
+- `runWorkerEdit` reads `Flags().Changed("role")` instead of testing for an empty string, because `--role ""` is a real instruction (clear the label) and must not be confused with not passing the flag at all.
 
 ## dream onboard
 - `printOnboardBrief` is written for an AI agent as the reader; every command it prints must match this package's real flag set, and the same rule is enforced mechanically for template briefs by `TestTemplateBriefsOnlyPrintRealCommands` and `TestTemplateBriefFlagsExist`.
