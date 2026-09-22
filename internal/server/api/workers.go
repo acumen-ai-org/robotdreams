@@ -139,6 +139,42 @@ func (a *API) handleReassign(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, newWorkerView(worker))
 }
 
+func (a *API) handleDeleteWorker(w http.ResponseWriter, r *http.Request) {
+	claims, _ := ClaimsFromContext(r.Context())
+	if !isAdmin(claims) {
+		writeError(w, http.StatusForbidden, "admin scope required")
+		return
+	}
+
+	id := r.PathValue("id")
+	cascade := r.URL.Query().Get("cascade") == "true"
+	reason := r.URL.Query().Get("reason")
+	if reason == "" {
+		reason = "deleted by " + claims.WorkerID
+	}
+
+	removed, err := a.srv.DeleteWorker(r.Context(), id, reason, cascade)
+	switch {
+	case err == nil:
+	case errors.Is(err, orgchart.ErrNotFound):
+		writeError(w, http.StatusNotFound, "no such worker")
+		return
+	default:
+		writeError(w, http.StatusInternalServerError, "could not delete worker")
+		return
+	}
+
+	for _, gone := range removed {
+		a.revCache.invalidate(gone)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"worker_id": id,
+		"removed":   removed,
+		"reason":    reason,
+	})
+}
+
 type revokeRequest struct {
 	Reason string `json:"reason"`
 }

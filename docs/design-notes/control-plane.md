@@ -31,6 +31,10 @@
 - `ReassignWorker` reads the current parent before the move so the outgoing parent, not the incoming one, is the one whose consent counts; a committed move is not rolled back when the notice fails to emit.
 - `SetWorkerRole` returns before writing when the new role equals the old one, so a no-op edit persists nothing, announces no control message and leaves the SSE poll nothing to diff.
 - `SetWorkerRole` applies the same authorization rule as `ReassignWorker` (the worker, its parent, or an admin) rather than admin-only: relabelling a node is no more privileged than moving one.
+- `DeleteWorker` revokes every ID it removes in the same pass: a delete that left a reconnectable identity behind would be a removal an operator has to remember to follow with a revoke, so the two are one operation and a deleted worker cannot reconnect until it is enrolled again.
+- `DeleteWorker` reparents the target's direct reports to the target's own parent rather than to root, so the subtree keeps its shape and a child of a root-level worker lands at root only because that is its grandparent; `reattachOrphansToRoot` stays the restart-time repair for a chart already broken on disk, where the real parent is unknown.
+- `DeleteWorker` walks `Descendants` (BFS) in reverse under `--cascade`, so removal is deepest-first with the target last and no intermediate state has a worker pointing at a parent that is already gone.
+- `DeleteWorker` also deletes every schedule the removed worker owns or is addressed to (`Filter{Worker:}` matches both): a schedule outliving its worker fires on every tick forever, and `FireSchedule` fails on the missing owner, so it would be a log leak nobody owns.
 - `loadGraph` re-attaches a worker whose stored parent is missing to root (`reattachOrphansToRoot`) and persists the repair, so no registry row silently vanishes after tampering with `control.db`.
 - `Config.ReportsDir` is re-read on every startup, unlike `OrgChartFile`, because a report library is declarative configuration and a newer one on disk should win.
 - `MintAdminToken` carries literal `storage:read:*`/`storage:write:*` beside `AdminScope` so code inspecting `Scopes` directly still sees that admin can touch everything.
@@ -57,6 +61,7 @@
 - `verifyChallenge` requires the client to echo the server-issued nonce exactly; signing self-chosen material would prove possession but not freshness.
 - `handleToken` reads the public key from the org chart, never from the request; a refresh that could supply its own key would let any keypair take over any worker ID.
 - `revocationCache` lives in the validator (this front end), not in `identity.RevocationStore`, because each validator (a storage backend validating on its own) gets its own cache; `handleRevoke` busts the entry immediately.
+- `handleDeleteWorker` requires the admin scope, unlike `handleReassign` and `handleEditWorker`, which also accept the worker itself or its parent: those rearrange the chart, a delete revokes, so it carries `handleRevoke`'s rule and not theirs.
 - `handleRevoke` requires the admin scope and does not require the worker to exist in the org chart; revoking an ID that never completed connect is a legitimate pre-emptive action.
 - `requireEnrollmentAuth` compares the enrollment secret with `constantTimeEqual`; length leaks, but the secret is fixed-length high-entropy so that is harmless.
 - `decodeJSON` caps every body at `maxJSONBodyBytes` before auth runs (pinned by `TestDecodeJSONRejectsOversizedBody`), so an anonymous caller cannot exhaust memory via the unauthenticated connect endpoints.

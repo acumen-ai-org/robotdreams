@@ -509,3 +509,22 @@ func TestRunReturnsOnAlreadyCanceledContext(t *testing.T) {
 		t.Fatalf("log = %q", logs.String())
 	}
 }
+
+func TestDeleteWorkerRemovesItsSchedules(t *testing.T) {
+	e := newSchedEnv(t)
+	e.put(t, "owned-by-leaf", "0 12 * * *", "leaf-1", "lead-1", true)
+	e.put(t, "addressed-to-leaf", "0 12 * * *", "lead-1", "leaf-1", true)
+	e.put(t, "unrelated", "0 12 * * *", "lead-1", "lead-1", true)
+
+	if _, err := e.srv.DeleteWorker(e.ctx, "leaf-1", "gone", false); err != nil {
+		t.Fatalf("DeleteWorker: %v", err)
+	}
+
+	left, err := e.srv.Schedules().List(e.ctx, scheduling.Filter{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(left) != 1 || left[0].ID != "unrelated" {
+		t.Fatalf("schedules after the delete = %+v, want only \"unrelated\"", left)
+	}
+}

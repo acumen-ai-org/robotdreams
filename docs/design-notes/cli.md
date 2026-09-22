@@ -44,6 +44,9 @@
 - `discoverLocalEnrollmentToken` returns `""` (no error) for a missing or unreadable file, so the server's 401 tells the operator to pass `--admin-token` rather than the CLI failing an open-enrollment dev server locally.
 - `runWorkerAppSet` validates the URL with `server.ValidateAppURL` before dialing, so a typo is reported next to the flag; `TestWorkerAppSetRejectsBadURLBeforeDialing` pins it.
 - `dream worker edit` is a field-agnostic verb rather than a `set-role` command: role is the first editable field, not the last, and a second verb per field would make the surface grow without teaching an operator anything new.
+- `dream worker delete` takes an admin token instead of resolving a local worker identity like its siblings, because the server requires the admin scope for it: a delete revokes, and no worker identity — not even the target's parent — can authorize that.
+- `discoverLocalAdminToken` mints a token from the server's data dir (`mintLocalAdminToken`, as `dream server revoke` does) rather than reading `enrollment.token` the way `discoverLocalEnrollmentToken` does: an enrollment secret authorizes registration only, so it would be refused by an admin-scoped endpoint.
+- `discoverLocalAdminToken` checks for `store.DBFileName` before minting, because `server.New` creates a data dir and signing key when none exists: without the check, a loopback address with no local control plane mints a token signed by an unrelated fresh key, and the operator reads `invalid token` instead of being told no credential was found.
 - `runWorkerEdit` reads `Flags().Changed("role")` instead of testing for an empty string, because `--role ""` is a real instruction (clear the label) and must not be confused with not passing the flag at all.
 
 ## dream onboard

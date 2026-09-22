@@ -546,3 +546,114 @@ func TestSetRoleLeavesSiblingsAlone(t *testing.T) {
 		t.Errorf("sibling Role = %q, want the untouched fixture role", sibling.Role)
 	}
 }
+
+func TestRemove(t *testing.T) {
+	tests := []struct {
+		name    string
+		worker  string
+		wantErr error
+	}{
+		{name: "removes a leaf", worker: "ic-a1a"},
+		{name: "removes a middle manager", worker: "manager-a"},
+		{name: "removes a root", worker: "solo"},
+		{name: "unknown worker rejected", worker: "ghost", wantErr: ErrNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := fixtureGraph(t)
+
+			err := g.Remove(tt.worker)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("Remove error = %v, want errors.Is(..., %v)", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Remove: unexpected error: %v", err)
+			}
+			if _, err := g.Get(tt.worker); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("Get after Remove error = %v, want ErrNotFound", err)
+			}
+			if err := g.Remove(tt.worker); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("second Remove error = %v, want ErrNotFound", err)
+			}
+		})
+	}
+}
+
+func TestRemoveLeavesChildrenPointingAtTheAbsentParent(t *testing.T) {
+	g := fixtureGraph(t)
+
+	if err := g.Remove("lead-a1"); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	orphan, err := g.Get("ic-a1a")
+	if err != nil {
+		t.Fatalf("Get(ic-a1a): %v", err)
+	}
+	if orphan.ReportsTo != "lead-a1" {
+		t.Errorf("ReportsTo = %q, want the now-absent %q: a caller must reparent before removing", orphan.ReportsTo, "lead-a1")
+	}
+	if _, err := g.Children("lead-a1"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Children of a removed worker error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestDescendants(t *testing.T) {
+	g := fixtureGraph(t)
+	tests := []struct {
+		worker  string
+		want    []string
+		wantErr error
+	}{
+		{worker: "director", want: []string{"ic-a1a", "ic-a1b", "ic-a2a", "lead-a1", "lead-a2", "lead-b1", "manager-a", "manager-b"}},
+		{worker: "manager-a", want: []string{"ic-a1a", "ic-a1b", "ic-a2a", "lead-a1", "lead-a2"}},
+		{worker: "manager-b", want: []string{"lead-b1"}},
+		{worker: "lead-a1", want: []string{"ic-a1a", "ic-a1b"}},
+		{worker: "ic-a1a", want: []string{}},
+		{worker: "solo", want: []string{}},
+		{worker: "ghost", wantErr: ErrNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.worker, func(t *testing.T) {
+			got, err := g.Descendants(tt.worker)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("Descendants error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Descendants: %v", err)
+			}
+			if !equalStrings(sortedIDs(got), tt.want) {
+				t.Errorf("Descendants(%q) = %v, want %v", tt.worker, sortedIDs(got), tt.want)
+			}
+		})
+	}
+}
+
+func TestDescendantsIsBreadthFirst(t *testing.T) {
+	g := fixtureGraph(t)
+
+	got, err := g.Descendants("manager-a")
+	if err != nil {
+		t.Fatalf("Descendants: %v", err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("Descendants(manager-a) = %v, want 5 nodes", ids(got))
+	}
+	nearest := ids(got)[:2]
+	sort.Strings(nearest)
+	if !equalStrings(nearest, []string{"lead-a1", "lead-a2"}) {
+		t.Errorf("first level = %v, want the direct children first", nearest)
+	}
+	deepest := ids(got)[2:]
+	sort.Strings(deepest)
+	if !equalStrings(deepest, []string{"ic-a1a", "ic-a1b", "ic-a2a"}) {
+		t.Errorf("second level = %v, want the grandchildren last", deepest)
+	}
+}

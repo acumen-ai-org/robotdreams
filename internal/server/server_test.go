@@ -6,12 +6,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/acumen-ai-org/robotdreams/internal/orgchart"
+	"github.com/acumen-ai-org/robotdreams/internal/server/store"
 	"github.com/acumen-ai-org/robotdreams/pkg/messaging"
 	"github.com/acumen-ai-org/robotdreams/pkg/security"
 )
@@ -848,4 +850,253 @@ func TestSetWorkerRoleUnknownWorker(t *testing.T) {
 	if !errors.Is(err, orgchart.ErrNotFound) {
 		t.Fatalf("want orgchart.ErrNotFound, got %v", err)
 	}
+}
+
+func assertRevoked(t *testing.T, s *Server, workerID string) {
+	t.Helper()
+	revoked, err := s.Revocations().IsRevoked(context.Background(), workerID)
+	if err != nil {
+		t.Fatalf("IsRevoked(%q): %v", workerID, err)
+	}
+	if !revoked {
+		t.Errorf("%q was removed but not revoked", workerID)
+	}
+}
+
+func assertGone(t *testing.T, s *Server, workerID string) {
+	t.Helper()
+	if _, err := s.Graph().Get(workerID); !errors.Is(err, orgchart.ErrNotFound) {
+		t.Errorf("Graph().Get(%q) error = %v, want ErrNotFound", workerID, err)
+	}
+	if _, err := s.Store().GetWorker(context.Background(), workerID); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("Store().GetWorker(%q) error = %v, want ErrNotFound", workerID, err)
+	}
+	assertRevoked(t, s, workerID)
+}
+
+func TestDeleteWorkerReparentsChildrenToTheGrandparent(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "director", "")
+	connect(t, s, "manager", "director")
+	connect(t, s, "leaf-a", "manager")
+	connect(t, s, "leaf-b", "manager")
+
+	removed, err := s.DeleteWorker(ctx, "manager", "restructure", false)
+	if err != nil {
+		t.Fatalf("DeleteWorker: %v", err)
+	}
+	if !equalIDs(removed, []string{"manager"}) {
+		t.Fatalf("removed = %v, want only the target", removed)
+	}
+	assertGone(t, s, "manager")
+
+	for _, child := range []string{"leaf-a", "leaf-b"} {
+		got, gerr := s.Graph().Get(child)
+		if gerr != nil {
+			t.Fatalf("Get(%q): %v", child, gerr)
+		}
+		if got.ReportsTo != "director" {
+			t.Errorf("%q reports to %q, want the grandparent director", child, got.ReportsTo)
+		}
+		stored, gerr := s.Store().GetWorker(ctx, child)
+		if gerr != nil {
+			t.Fatalf("GetWorker(%q): %v", child, gerr)
+		}
+		if stored.ReportsTo != "director" {
+			t.Errorf("%q persisted reports_to = %q, want director", child, stored.ReportsTo)
+		}
+		revoked, rerr := s.Revocations().IsRevoked(ctx, child)
+		if rerr != nil {
+			t.Fatalf("IsRevoked(%q): %v", child, rerr)
+		}
+		if revoked {
+			t.Errorf("a reparented child %q was revoked", child)
+		}
+	}
+}
+
+func TestDeleteWorkerOfARootMovesChildrenToRoot(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "lead", "")
+	connect(t, s, "leaf", "lead")
+
+	if _, err := s.DeleteWorker(ctx, "lead", "", false); err != nil {
+		t.Fatalf("DeleteWorker: %v", err)
+	}
+	got, err := s.Graph().Get("leaf")
+	if err != nil {
+		t.Fatalf("Get(leaf): %v", err)
+	}
+	if got.ReportsTo != "" {
+		t.Errorf("leaf reports to %q, want the empty root", got.ReportsTo)
+	}
+	assertGone(t, s, "lead")
+}
+
+func TestDeleteWorkerCascadeRemovesTheSubtreeDeepestFirst(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "director", "")
+	connect(t, s, "manager", "director")
+	connect(t, s, "lead", "manager")
+	connect(t, s, "leaf", "lead")
+	connect(t, s, "other-manager", "director")
+	connect(t, s, "other-leaf", "other-manager")
+
+	removed, err := s.DeleteWorker(ctx, "manager", "restructure", true)
+	if err != nil {
+		t.Fatalf("DeleteWorker: %v", err)
+	}
+	if !equalIDs(removed, []string{"leaf", "lead", "manager"}) {
+		t.Fatalf("removed = %v, want the subtree deepest-first with the target last", removed)
+	}
+	for _, id := range removed {
+		assertGone(t, s, id)
+	}
+
+	for _, survivor := range []string{"director", "other-manager", "other-leaf"} {
+		if _, gerr := s.Graph().Get(survivor); gerr != nil {
+			t.Errorf("the sibling subtree lost %q: %v", survivor, gerr)
+		}
+		revoked, rerr := s.Revocations().IsRevoked(ctx, survivor)
+		if rerr != nil {
+			t.Fatalf("IsRevoked(%q): %v", survivor, rerr)
+		}
+		if revoked {
+			t.Errorf("the sibling subtree member %q was revoked", survivor)
+		}
+	}
+	got, err := s.Graph().Get("other-leaf")
+	if err != nil {
+		t.Fatalf("Get(other-leaf): %v", err)
+	}
+	if got.ReportsTo != "other-manager" {
+		t.Errorf("other-leaf reports to %q, want it untouched", got.ReportsTo)
+	}
+}
+
+func TestDeleteWorkerEmitsControlMessage(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "director", "")
+	connect(t, s, "manager", "director")
+	connect(t, s, "leaf-a", "manager")
+	connect(t, s, "leaf-b", "manager")
+
+	if _, err := s.DeleteWorker(ctx, "manager", "restructure", false); err != nil {
+		t.Fatalf("DeleteWorker: %v", err)
+	}
+
+	all, err := s.Messaging().Tail(ctx, messaging.TailFilter{})
+	if err != nil {
+		t.Fatalf("Tail: %v", err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("want 3 control messages, got %d", len(all))
+	}
+
+	for _, recipient := range []string{"leaf-a", "leaf-b", "director"} {
+		msgs, terr := s.Messaging().Tail(ctx, messaging.TailFilter{WorkerID: recipient})
+		if terr != nil {
+			t.Fatalf("Tail(%q): %v", recipient, terr)
+		}
+		if len(msgs) != 1 {
+			t.Fatalf("%q got %d control messages, want 1", recipient, len(msgs))
+		}
+		env := msgs[0]
+		if env.From != ControlWorkerID || env.Subject != SubjectWorkerDeleted {
+			t.Fatalf("unexpected control message: from=%q subject=%q", env.From, env.Subject)
+		}
+		if env.Type != messaging.TypeStatusUpdate {
+			t.Fatalf("control message type = %q, want %q", env.Type, messaging.TypeStatusUpdate)
+		}
+		var body struct {
+			WorkerID   string   `json:"worker_id"`
+			Removed    []string `json:"removed"`
+			Reparented []string `json:"reparented"`
+			ReportsTo  string   `json:"reports_to"`
+			Reason     string   `json:"reason"`
+		}
+		if jerr := json.Unmarshal(env.Body, &body); jerr != nil {
+			t.Fatalf("unmarshal body: %v", jerr)
+		}
+		sort.Strings(body.Reparented)
+		if body.WorkerID != "manager" || body.ReportsTo != "director" || body.Reason != "restructure" {
+			t.Fatalf("unexpected control body: %+v", body)
+		}
+		if !equalIDs(body.Removed, []string{"manager"}) {
+			t.Fatalf("body removed = %v, want only the target", body.Removed)
+		}
+		if !equalIDs(body.Reparented, []string{"leaf-a", "leaf-b"}) {
+			t.Fatalf("body reparented = %v, want both children", body.Reparented)
+		}
+	}
+}
+
+func TestDeleteWorkerOfARootSkipsTheAbsentParent(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "lead", "")
+	connect(t, s, "leaf", "lead")
+
+	if _, err := s.DeleteWorker(ctx, "lead", "", false); err != nil {
+		t.Fatalf("DeleteWorker: %v", err)
+	}
+	all, err := s.Messaging().Tail(ctx, messaging.TailFilter{})
+	if err != nil {
+		t.Fatalf("Tail: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("want 1 control message, got %d", len(all))
+	}
+	if all[0].To != "leaf" {
+		t.Fatalf("control message addressed to %q, want leaf", all[0].To)
+	}
+}
+
+func TestDeleteWorkerDefaultsTheReason(t *testing.T) {
+	s := newTestServer(t, nil)
+	ctx := context.Background()
+	connect(t, s, "lead", "")
+	connect(t, s, "leaf", "lead")
+
+	if _, err := s.DeleteWorker(ctx, "leaf", "", false); err != nil {
+		t.Fatalf("DeleteWorker: %v", err)
+	}
+	msgs, err := s.Messaging().Tail(ctx, messaging.TailFilter{WorkerID: "lead"})
+	if err != nil {
+		t.Fatalf("Tail: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("want 1 control message, got %d", len(msgs))
+	}
+	var body map[string]any
+	if err := json.Unmarshal(msgs[0].Body, &body); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if body["reason"] != SubjectWorkerDeleted {
+		t.Fatalf("reason = %v, want the default %q", body["reason"], SubjectWorkerDeleted)
+	}
+}
+
+func TestDeleteWorkerUnknownWorker(t *testing.T) {
+	s := newTestServer(t, nil)
+	_, err := s.DeleteWorker(context.Background(), "ghost", "", false)
+	if !errors.Is(err, orgchart.ErrNotFound) {
+		t.Fatalf("want orgchart.ErrNotFound, got %v", err)
+	}
+}
+
+func equalIDs(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
