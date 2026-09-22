@@ -81,6 +81,23 @@ worker's current parent, or a caller holding the admin scope, and
 answers 403 to anyone else. Relabelling a node is no more privileged
 than moving one, so neither is admin-only.
 
+`DELETE /api/workers/{id}` removes a worker from the org chart, and is
+admin-only (403 `admin scope required` otherwise) — the same rule as
+`POST /api/workers/{id}/revoke`, and for the same reason: **a delete
+revokes**. The two are one operation, not a removal that leaves a
+still-usable identity behind, so a deleted worker cannot reconnect. Its
+next `dream worker connect` is refused because the ID is revoked, until
+an admin enrolls it again. `?cascade=true` extends this to every worker
+beneath the target, deepest-first and the target last, so one call can
+revoke many identities; `?reason=...` is recorded against each
+revocation, defaulting to `deleted by <caller>`. An unknown ID answers
+404. `dream worker delete` is the CLI for it, and unlike its sibling
+`dream worker` commands it does not authenticate as a local worker
+identity: it takes `--admin-token`, then `$DREAM_TOKEN`, then mints an
+admin token from the local server's data directory when `--server` is
+a loopback address — the same **filesystem-access bootstrap** as `dream
+server revoke`, with the same caveat under "Known limitations" below.
+
 ### Delegated (ephemeral) child workers
 
 A connected worker can mint a credential for a short-lived child of its

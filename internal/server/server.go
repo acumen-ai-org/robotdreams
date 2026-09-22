@@ -44,6 +44,8 @@ const (
 
 	SubjectWorkerRoleChanged = "worker role changed"
 
+	SubjectWorkerDeleted = "worker deleted"
+
 	SubjectUpdateAvailable = updates.SubjectUpdateAvailable
 )
 
@@ -581,6 +583,111 @@ func (s *Server) SetWorkerRole(ctx context.Context, workerID, role, callerWorker
 		}
 		if err := s.messaging.Emit(ctx, env); err != nil {
 			return fmt.Errorf("server: announce role change to %q: %w", to, err)
+		}
+	}
+	return nil
+}
+
+func (s *Server) DeleteWorker(ctx context.Context, workerID, reason string, cascade bool) ([]string, error) {
+	target, err := s.graph.Get(workerID)
+	if err != nil {
+		return nil, err
+	}
+
+	parent := target.ReportsTo
+	var reparented []string
+
+	var removing []string
+	if cascade {
+		descendants, derr := s.graph.Descendants(workerID)
+		if derr != nil {
+			return nil, derr
+		}
+		for i := len(descendants) - 1; i >= 0; i-- {
+			removing = append(removing, descendants[i].ID)
+		}
+	} else {
+		children, cerr := s.graph.Children(workerID)
+		if cerr != nil {
+			return nil, cerr
+		}
+		for _, child := range children {
+			if rerr := s.graph.Reassign(child.ID, parent); rerr != nil {
+				return nil, rerr
+			}
+			moved, gerr := s.graph.Get(child.ID)
+			if gerr != nil {
+				return nil, gerr
+			}
+			if uerr := s.store.UpsertWorker(ctx, moved); uerr != nil {
+				return nil, uerr
+			}
+			reparented = append(reparented, child.ID)
+		}
+	}
+
+	removing = append(removing, workerID)
+
+	if reason == "" {
+		reason = "worker deleted"
+	}
+
+	for _, id := range removing {
+		if rerr := s.graph.Remove(id); rerr != nil {
+			return nil, rerr
+		}
+		if derr := s.store.DeleteWorker(ctx, id); derr != nil {
+			return nil, derr
+		}
+		if verr := s.store.Revocations().Revoke(ctx, id, reason); verr != nil {
+			return nil, fmt.Errorf("server: revoke deleted worker %q: %w", id, verr)
+		}
+		if serr := s.deleteWorkerSchedules(ctx, id); serr != nil {
+			return nil, serr
+		}
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"worker_id":  workerID,
+		"removed":    removing,
+		"reparented": reparented,
+		"reports_to": parent,
+		"reason":     reason,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("server: marshal deletion notice: %w", err)
+	}
+
+	recipients := append([]string(nil), reparented...)
+	if parent != "" {
+		recipients = append(recipients, parent)
+	}
+
+	for _, to := range recipients {
+		env := messaging.Envelope{
+			ID:        NewID(),
+			Type:      messaging.TypeStatusUpdate,
+			From:      ControlWorkerID,
+			To:        to,
+			Subject:   SubjectWorkerDeleted,
+			Body:      body,
+			CreatedAt: s.clock.Now(),
+		}
+		if eerr := s.messaging.Emit(ctx, env); eerr != nil {
+			return nil, fmt.Errorf("server: announce deletion to %q: %w", to, eerr)
+		}
+	}
+	return removing, nil
+}
+
+func (s *Server) deleteWorkerSchedules(ctx context.Context, workerID string) error {
+	owned, err := s.store.Schedules().List(ctx, scheduling.Filter{Worker: workerID})
+	if err != nil {
+		return fmt.Errorf("server: list schedules of deleted worker %q: %w", workerID, err)
+	}
+	for _, sc := range owned {
+		if derr := s.store.Schedules().Delete(ctx, sc.ID); derr != nil {
+			return fmt.Errorf("server: delete schedule %q of deleted worker %q: %w", sc.ID, workerID, derr)
 		}
 	}
 	return nil

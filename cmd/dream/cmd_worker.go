@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/acumen-ai-org/robotdreams/internal/identity"
 	"github.com/acumen-ai-org/robotdreams/internal/server"
+	"github.com/acumen-ai-org/robotdreams/internal/server/store"
 	"github.com/acumen-ai-org/robotdreams/pkg/updates"
 )
 
@@ -27,7 +29,7 @@ func newWorkerCmd() *cobra.Command {
 		Aliases: []string{"node"},
 		Short:   "Connect and manage workers (nodes) against a control plane",
 	}
-	cmd.AddCommand(newWorkerConnectCmd(), newWorkerDelegateCmd(), newWorkerEditCmd(), newWorkerReassignCmd(), newWorkerListCmd(), newWorkerOnboardCmd(), newWorkerAppCmd())
+	cmd.AddCommand(newWorkerConnectCmd(), newWorkerDelegateCmd(), newWorkerEditCmd(), newWorkerDeleteCmd(), newWorkerReassignCmd(), newWorkerListCmd(), newWorkerOnboardCmd(), newWorkerAppCmd())
 	return cmd
 }
 
@@ -295,6 +297,131 @@ func runWorkerEdit(ctx context.Context, opts workerEditOptions) (workerView, err
 		return workerView{}, err
 	}
 	return out, nil
+}
+
+type workerDeleteOptions struct {
+	Target     string
+	Reason     string
+	Cascade    bool
+	Server     string
+	DataDir    string
+	AdminToken string
+}
+
+type workerDeleteResult struct {
+	WorkerID string   `json:"worker_id"`
+	Removed  []string `json:"removed"`
+	Reason   string   `json:"reason"`
+}
+
+func newWorkerDeleteCmd() *cobra.Command {
+	var opts workerDeleteOptions
+
+	cmd := &cobra.Command{
+		Use:   "delete <worker-id>",
+		Short: "Remove a worker from the org chart and revoke its identity",
+		Long: "Remove a worker from the org chart and revoke its identity.\n\n" +
+			"Deleting is permanent and does two things at once: the worker leaves\n" +
+			"the chart, and its identity is revoked, so it cannot reconnect until\n" +
+			"an admin enrolls it again. To correct a label instead, use `dream\n" +
+			"worker edit`; to move a worker, use `dream worker reassign`.\n\n" +
+			"By default the worker's direct reports move up to its own parent, so\n" +
+			"the chart stays connected. With --cascade every worker beneath it is\n" +
+			"deleted and revoked as well. The command prints everything it removed.\n\n" +
+			"Because a delete revokes, this call needs the admin scope, not a\n" +
+			"worker identity. Precedence: --admin-token, then $" + envDreamToken + ",\n" +
+			"then a token minted from the local server's data dir when --server is\n" +
+			"a loopback address. Minting locally needs filesystem access to the\n" +
+			"server's state, which is already equivalent to admin control; see\n" +
+			"docs/security-model.md.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.Target = args[0]
+			res, err := runWorkerDelete(cmd.Context(), opts)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			for _, id := range res.Removed {
+				fmt.Fprintf(out, "removed %s\n", id)
+			}
+			fmt.Fprintf(out, "%d removed and revoked\n", len(res.Removed))
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&opts.Cascade, "cascade", false, "delete every worker beneath this one as well")
+	cmd.Flags().StringVar(&opts.Reason, "reason", "", "reason recorded against the revocation")
+	cmd.Flags().StringVar(&opts.Server, "server", "", "control plane address (default: $"+envDreamURL+", else 127.0.0.1"+server.DefaultAddr+")")
+	cmd.Flags().StringVar(&opts.DataDir, "data-dir", "", "control plane state directory used to mint a local admin token (default ~/.dream/_server)")
+	cmd.Flags().StringVar(&opts.AdminToken, "admin-token", "", "admin token authorizing the delete "+
+		"(precedence: this flag, then $"+envDreamToken+", then a token minted from --data-dir "+
+		"when --server is a loopback address)")
+
+	return cmd
+}
+
+func runWorkerDelete(ctx context.Context, opts workerDeleteOptions) (workerDeleteResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	addr := serverAddrOrEnv(opts.Server)
+	if addr == "" {
+		addr = "127.0.0.1" + server.DefaultAddr
+	}
+
+	token := opts.AdminToken
+	if token == "" {
+		token = dreamTokenFromEnv()
+	}
+	if token == "" {
+		token = discoverLocalAdminToken(addr, opts.DataDir)
+	}
+	if token == "" {
+		return workerDeleteResult{}, fmt.Errorf("no admin credential: pass --admin-token, set %s, or run against a local server", envDreamToken)
+	}
+
+	path := "/api/workers/" + opts.Target
+	query := url.Values{}
+	if opts.Cascade {
+		query.Set("cascade", "true")
+	}
+	if opts.Reason != "" {
+		query.Set("reason", opts.Reason)
+	}
+	if len(query) > 0 {
+		path += "?" + query.Encode()
+	}
+
+	client := &apiClient{baseURL: baseURLFromAddr(addr), token: token, hc: defaultHTTPClient()}
+
+	var out workerDeleteResult
+	if err := client.doJSON(ctx, http.MethodDelete, path, nil, &out); err != nil {
+		return workerDeleteResult{}, err
+	}
+	return out, nil
+}
+
+func discoverLocalAdminToken(serverAddr, dataDir string) string {
+	if dataDir == "" {
+		if !isLoopbackServerAddr(serverAddr) {
+			return ""
+		}
+		d, err := defaultServerDataDir()
+		if err != nil {
+			return ""
+		}
+		dataDir = d
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, store.DBFileName)); err != nil {
+		return ""
+	}
+	token, err := mintLocalAdminToken(dataDir)
+	if err != nil {
+		return ""
+	}
+	return token
 }
 
 type workerReassignOptions struct {
