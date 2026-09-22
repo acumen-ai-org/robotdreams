@@ -6,6 +6,14 @@ from the Conventional Commits merged to `main`; the project adheres to
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
+## [0.1.4](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.3...v0.1.4) (2026-09-22)
+
+
+### Features
+
+* **cli:** delete a worker and revoke its identity ([59841ac](https://github.com/acumen-ai-org/robotdreams/commit/59841acdc34a534f03af5506dcae35432f4c3515))
+* **cli:** edit a worker's role after it has connected ([c6f4679](https://github.com/acumen-ai-org/robotdreams/commit/c6f46792220ea8b175ecb642c00613b9e6313f10))
+
 ## [0.1.3](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.2...v0.1.3) (2026-09-18)
 
 
