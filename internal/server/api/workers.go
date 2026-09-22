@@ -59,6 +59,45 @@ func (a *API) handleGetWorker(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, newWorkerView(worker))
 }
 
+type editWorkerRequest struct {
+	Role *string `json:"role"`
+}
+
+func (a *API) handleEditWorker(w http.ResponseWriter, r *http.Request) {
+	claims, _ := ClaimsFromContext(r.Context())
+	id := r.PathValue("id")
+
+	var req editWorkerRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.Role == nil {
+		writeError(w, http.StatusBadRequest, "no editable field given")
+		return
+	}
+
+	err := a.srv.SetWorkerRole(r.Context(), id, *req.Role, claims.WorkerID, isAdmin(claims))
+	switch {
+	case err == nil:
+	case errors.Is(err, server.ErrNotAuthorized):
+		writeError(w, http.StatusForbidden, "not authorized to edit this worker")
+		return
+	case errors.Is(err, orgchart.ErrNotFound):
+		writeError(w, http.StatusNotFound, "no such worker")
+		return
+	default:
+		writeError(w, http.StatusInternalServerError, "could not edit worker")
+		return
+	}
+
+	worker, err := a.srv.Graph().Get(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "worker disappeared during edit")
+		return
+	}
+	writeJSON(w, http.StatusOK, newWorkerView(worker))
+}
+
 type reassignRequest struct {
 	ReportsTo string `json:"reports_to"`
 }

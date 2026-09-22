@@ -42,6 +42,8 @@ const (
 
 	SubjectWorkerReassigned = "worker reassigned"
 
+	SubjectWorkerRoleChanged = "worker role changed"
+
 	SubjectUpdateAvailable = updates.SubjectUpdateAvailable
 )
 
@@ -514,6 +516,71 @@ func (s *Server) ReassignWorker(ctx context.Context, workerID, newParent, caller
 		}
 		if err := s.messaging.Emit(ctx, env); err != nil {
 			return fmt.Errorf("server: announce reassignment to %q: %w", to, err)
+		}
+	}
+	return nil
+}
+
+func (s *Server) SetWorkerRole(ctx context.Context, workerID, role, callerWorkerID string, callerIsAdmin bool) error {
+	current, err := s.graph.Get(workerID)
+	if err != nil {
+		return err
+	}
+
+	parent := current.ReportsTo
+	if !callerIsAdmin && callerWorkerID != workerID && callerWorkerID != parent {
+		return fmt.Errorf("server: set role of %q by %q: caller is neither the worker, its parent %q, nor an admin: %w",
+			workerID, callerWorkerID, parent, ErrNotAuthorized)
+	}
+
+	oldRole := current.Role
+	if oldRole == role {
+		return nil
+	}
+
+	if err := s.graph.SetRole(workerID, role); err != nil {
+		return err
+	}
+
+	updated, err := s.graph.Get(workerID)
+	if err != nil {
+		return err
+	}
+	if err := s.store.UpsertWorker(ctx, updated); err != nil {
+		return err
+	}
+
+	changedBy := callerWorkerID
+	if changedBy == "" {
+		changedBy = ControlWorkerID
+	}
+	body, err := json.Marshal(map[string]string{
+		"worker_id":  workerID,
+		"old_role":   oldRole,
+		"new_role":   role,
+		"changed_by": changedBy,
+	})
+	if err != nil {
+		return fmt.Errorf("server: marshal role change notice: %w", err)
+	}
+
+	recipients := []string{workerID}
+	if parent != "" && parent != workerID {
+		recipients = append(recipients, parent)
+	}
+
+	for _, to := range recipients {
+		env := messaging.Envelope{
+			ID:        NewID(),
+			Type:      messaging.TypeStatusUpdate,
+			From:      ControlWorkerID,
+			To:        to,
+			Subject:   SubjectWorkerRoleChanged,
+			Body:      body,
+			CreatedAt: s.clock.Now(),
+		}
+		if err := s.messaging.Emit(ctx, env); err != nil {
+			return fmt.Errorf("server: announce role change to %q: %w", to, err)
 		}
 	}
 	return nil

@@ -73,6 +73,14 @@ health/JWKS endpoints require an authenticated bearer token
 /api/workers` additionally requires an admin/enrollment credential — see
 "Fixed in this pass" below.
 
+`PATCH /api/workers/{id}` edits a registered worker — today its `role`
+label — and `POST /api/workers/{id}/reassign` moves it under a new
+parent. Both carry the same authorization rule beyond the bearer token:
+the control plane accepts the call only from the worker itself, the
+worker's current parent, or a caller holding the admin scope, and
+answers 403 to anyone else. Relabelling a node is no more privileged
+than moving one, so neither is admin-only.
+
 ### Delegated (ephemeral) child workers
 
 A connected worker can mint a credential for a short-lived child of its

@@ -575,8 +575,10 @@ registry entry — the slot is documented in the registry file.
   tree from whatever root you're viewing. See the depth-3 rollup rule
   below.
 - **Live activity** — a live feed over the `GET /api/events`
-  server-sent-events stream: worker connects, messages, storage writes as
-  they happen.
+  server-sent-events stream: worker connects, role changes
+  (`worker_role_changed`), messages, storage writes as they happen.
+  Mission Control only reflects these — it never edits a node; a role is
+  corrected with `dream worker edit`.
 - **Storage browser** — lists objects in the storage backend under a
   prefix, mirroring `dream storage ls`.
 

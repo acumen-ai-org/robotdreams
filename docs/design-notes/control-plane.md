@@ -29,6 +29,8 @@
 - `EmitFromWorker` honours an explicit `To` for `completed_work` and `request_for_input` only if it names a registered worker; `status_update` and `escalation` always go one hop up.
 - `EmitFromWorker` checks only that a `StoragePtr` has a path, never that the object exists, so an emit costs no storage round-trip and may reference another deployment's backend.
 - `ReassignWorker` reads the current parent before the move so the outgoing parent, not the incoming one, is the one whose consent counts; a committed move is not rolled back when the notice fails to emit.
+- `SetWorkerRole` returns before writing when the new role equals the old one, so a no-op edit persists nothing, announces no control message and leaves the SSE poll nothing to diff.
+- `SetWorkerRole` applies the same authorization rule as `ReassignWorker` (the worker, its parent, or an admin) rather than admin-only: relabelling a node is no more privileged than moving one.
 - `loadGraph` re-attaches a worker whose stored parent is missing to root (`reattachOrphansToRoot`) and persists the repair, so no registry row silently vanishes after tampering with `control.db`.
 - `Config.ReportsDir` is re-read on every startup, unlike `OrgChartFile`, because a report library is declarative configuration and a newer one on disk should win.
 - `MintAdminToken` carries literal `storage:read:*`/`storage:write:*` beside `AdminScope` so code inspecting `Scopes` directly still sees that admin can touch everything.
@@ -60,6 +62,8 @@
 - `decodeJSON` caps every body at `maxJSONBodyBytes` before auth runs (pinned by `TestDecodeJSONRejectsOversizedBody`), so an anonymous caller cannot exhaust memory via the unauthenticated connect endpoints.
 - `handleListWorkers` returns a flat, ID-sorted list with `reports_to` edges; clients assemble the tree, keeping one unambiguous wire shape; `workerView` is a separate type from `orgchart.Worker` so JSON names stay stable.
 - `reassignRequest` treats an empty `reports_to` as meaningful: it moves the worker to the root, so blank is not "missing".
+- Editing a worker is `PATCH /api/workers/{id}` with a pointer field, not a `POST /api/workers/{id}/role` subresource, so a later editable field joins the same route and the same `dream worker edit` verb instead of adding both.
+- `editWorkerRequest.Role` is a `*string`: an absent `role` key is "not edited" (400, no editable field given) while an empty string is "cleared", which is why the CLI decides on `Flags().Changed("role")` rather than on the value.
 - `handleHealth` is unauthenticated on purpose: a liveness probe needs no credential and the body says only up or down, never what or where.
 - `eventHub` polls orgchart, storage and messaging once per `pollInterval` and fans out to every `/api/events` subscriber, so load scales with the org chart, not with viewers; the poll goroutine runs only while a subscriber exists.
 - `eventHub.broadcast` drops an event for a subscriber whose buffer is full rather than blocking the hub on a stalled client.

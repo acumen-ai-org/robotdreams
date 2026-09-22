@@ -113,6 +113,15 @@ export function useLiveState(): LiveState {
           );
           setOrgVersion((v) => v + 1);
           break;
+        case "worker_role_changed":
+          addActivity(
+            "worker",
+            "role changed",
+            str("worker_id") + ": " + (str("old_role") || "—") + " → " + (str("new_role") || "—"),
+            [str("worker_id")],
+          );
+          setOrgVersion((v) => v + 1);
+          break;
         case "worker_status_changed":
           addActivity("worker", "status changed", str("worker_id") + " → " + str("status"), [str("worker_id")]);
           setOrgVersion((v) => v + 1);
