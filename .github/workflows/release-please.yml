@@ -1,10 +1,16 @@
 # release-please keeps a release pull request open against main. Every
 # Conventional Commit merged to main updates that PR's CHANGELOG entry
-# and proposed version (feat → minor, fix → patch, "!"/BREAKING CHANGE →
-# minor while pre-1.0). Merging the PR tags the release; release.yml then
-# builds it — automatically only if RELEASE_PLEASE_TOKEN (a PAT) is set,
-# since tags pushed with GITHUB_TOKEN start no workflows. Without the
-# PAT, run release.yml by hand with the tag.
+# and proposed version (pre-1.0: feat and fix both bump the patch, and
+# "!"/BREAKING CHANGE bumps the minor; see release-please-config.json).
+# Merging the PR tags the release, and this workflow then calls
+# release.yml to build it.
+#
+# The build is a workflow_call, not a tag push: release-please creates
+# the tag with GITHUB_TOKEN, and events made with that token start no
+# workflows, so release.yml's own `push: tags` trigger never fires for an
+# automated release. A called workflow runs inside this run instead, so
+# it needs no RELEASE_PLEASE_TOKEN PAT. Releases 0.1.3 and 0.1.4 tagged
+# with nothing built because that link was missing.
 name: release-please
 
 on:
@@ -21,10 +27,27 @@ jobs:
     permissions:
       contents: write # create the tag and the GitHub Release
       pull-requests: write # open and update the release PR
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - name: release-please
+        id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Only after release-please actually tagged: builds the binaries, adds
+  # them to the release it just created, and publishes the npm launcher.
+  release:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write # goreleaser uploads to the GitHub Release
+      id-token: write # npm provenance attestation
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit
