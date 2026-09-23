@@ -121,6 +121,47 @@ func (g *Graph) SetRole(workerID, role string) error {
 	return nil
 }
 
+func (g *Graph) Remove(workerID string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if _, ok := g.workers[workerID]; !ok {
+		return fmt.Errorf("orgchart: remove %q: %w", workerID, ErrNotFound)
+	}
+	delete(g.workers, workerID)
+	return nil
+}
+
+func (g *Graph) Descendants(workerID string) ([]Worker, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	if _, ok := g.workers[workerID]; !ok {
+		return nil, fmt.Errorf("orgchart: descendants of %q: %w", workerID, ErrNotFound)
+	}
+
+	childrenOf := make(map[string][]*Worker, len(g.workers))
+	for _, w := range g.workers {
+		if w.ReportsTo != "" {
+			childrenOf[w.ReportsTo] = append(childrenOf[w.ReportsTo], w)
+		}
+	}
+
+	var out []Worker
+	frontier := []string{workerID}
+	for len(frontier) > 0 {
+		var next []string
+		for _, id := range frontier {
+			for _, child := range childrenOf[id] {
+				out = append(out, child.clone())
+				next = append(next, child.ID)
+			}
+		}
+		frontier = next
+	}
+	return out, nil
+}
+
 func (g *Graph) hasAncestorLocked(start *Worker, ancestorID string) bool {
 	for cur := start; cur != nil && cur.ReportsTo != ""; {
 		if cur.ReportsTo == ancestorID {

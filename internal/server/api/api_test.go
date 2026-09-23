@@ -1323,3 +1323,145 @@ func TestEditWorkerEmitsVisibleControlMessage(t *testing.T) {
 		t.Fatalf("unexpected control message: %+v", resp.Messages[0])
 	}
 }
+
+type deleteWorkerView struct {
+	WorkerID string   `json:"worker_id"`
+	Removed  []string `json:"removed"`
+	Reason   string   `json:"reason"`
+}
+
+func TestDeleteWorkerOverHTTP(t *testing.T) {
+	cases := []struct {
+		name       string
+		target     string
+		caller     string
+		wantStatus int
+	}{
+		{name: "an admin", target: "leaf", caller: "", wantStatus: http.StatusOK},
+		{name: "the parent without admin scope", target: "leaf", caller: "lead", wantStatus: http.StatusForbidden},
+		{name: "the worker itself", target: "leaf", caller: "leaf", wantStatus: http.StatusForbidden},
+		{name: "an unrelated worker", target: "leaf", caller: "peer", wantStatus: http.StatusForbidden},
+		{name: "an unknown worker", target: "ghost", caller: "", wantStatus: http.StatusNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newTestEnv(t, nil)
+			lead := e.connect("lead", "lead", "")
+			leaf := e.connect("leaf", "contributor", "lead")
+			peer := e.connect("peer", "contributor", "")
+
+			token := map[string]string{
+				"lead": lead.Token,
+				"leaf": leaf.Token,
+				"peer": peer.Token,
+			}[tc.caller]
+			if tc.caller == "" {
+				token = e.adminToken("mission-control")
+			}
+
+			status, raw := e.do(http.MethodDelete, "/api/workers/"+tc.target, token, nil)
+			if status != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body %s", status, tc.wantStatus, raw)
+			}
+
+			if tc.wantStatus != http.StatusOK {
+				if _, err := e.srv.Graph().Get("leaf"); err != nil {
+					t.Fatalf("a refused delete still removed leaf: %v", err)
+				}
+				return
+			}
+
+			var view deleteWorkerView
+			decodeInto(t, raw, &view)
+			if view.WorkerID != "leaf" || len(view.Removed) != 1 || view.Removed[0] != "leaf" {
+				t.Fatalf("unexpected delete view: %+v", view)
+			}
+			if view.Reason != "deleted by mission-control" {
+				t.Fatalf("reason = %q, want it to name the caller", view.Reason)
+			}
+			if _, err := e.srv.Graph().Get("leaf"); err == nil {
+				t.Fatal("leaf survived the delete")
+			}
+			if _, err := e.srv.Graph().Get("lead"); err != nil {
+				t.Fatalf("the parent was deleted too: %v", err)
+			}
+		})
+	}
+}
+
+func TestDeleteWorkerCascadeOverHTTP(t *testing.T) {
+	e := newTestEnv(t, nil)
+	e.connect("lead", "lead", "")
+	e.connect("leaf", "contributor", "lead")
+	e.connect("grand-leaf", "contributor", "leaf")
+	e.connect("peer", "contributor", "")
+
+	status, raw := e.do(http.MethodDelete, "/api/workers/lead?cascade=true&reason=restructure", e.adminToken("mission-control"), nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", status, raw)
+	}
+	var view deleteWorkerView
+	decodeInto(t, raw, &view)
+	if view.Reason != "restructure" {
+		t.Fatalf("reason = %q, want the query parameter", view.Reason)
+	}
+	want := []string{"grand-leaf", "leaf", "lead"}
+	if len(view.Removed) != len(want) {
+		t.Fatalf("removed = %v, want %v", view.Removed, want)
+	}
+	for i := range want {
+		if view.Removed[i] != want[i] {
+			t.Fatalf("removed = %v, want %v (deepest first, target last)", view.Removed, want)
+		}
+	}
+	for _, gone := range want {
+		if _, err := e.srv.Graph().Get(gone); err == nil {
+			t.Errorf("%q survived the cascade", gone)
+		}
+	}
+	if _, err := e.srv.Graph().Get("peer"); err != nil {
+		t.Errorf("the cascade reached an unrelated worker: %v", err)
+	}
+}
+
+func TestDeleteWorkerRevokesTheTokenImmediately(t *testing.T) {
+	e := newTestEnv(t, nil)
+	e.connect("lead", "lead", "")
+	leaf := e.connect("leaf", "contributor", "lead")
+
+	if status, _ := e.do(http.MethodGet, "/api/workers", leaf.Token, nil); status != http.StatusOK {
+		t.Fatal("warm-up call failed")
+	}
+	if status, raw := e.do(http.MethodDelete, "/api/workers/leaf", e.adminToken("mission-control"), nil); status != http.StatusOK {
+		t.Fatalf("delete: status %d, body %s", status, raw)
+	}
+	if status, _ := e.do(http.MethodGet, "/api/workers", leaf.Token, nil); status != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 right after the delete invalidated the cache", status)
+	}
+}
+
+func TestDeleteWorkerEmitsVisibleControlMessage(t *testing.T) {
+	e := newTestEnv(t, nil)
+	lead := e.connect("lead", "lead", "")
+	e.connect("leaf", "contributor", "lead")
+
+	if status, raw := e.do(http.MethodDelete, "/api/workers/leaf", e.adminToken("mission-control"), nil); status != http.StatusOK {
+		t.Fatalf("delete: status %d, body %s", status, raw)
+	}
+
+	status, raw := e.do(http.MethodGet, "/api/messages?worker_id=lead", lead.Token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("tail: status %d, body %s", status, raw)
+	}
+	var resp struct {
+		Messages []envelopeView `json:"messages"`
+	}
+	decodeInto(t, raw, &resp)
+	if len(resp.Messages) != 1 {
+		t.Fatalf("want 1 control message for the parent, got %d", len(resp.Messages))
+	}
+	if resp.Messages[0].Subject != server.SubjectWorkerDeleted || resp.Messages[0].From != server.ControlWorkerID {
+		t.Fatalf("unexpected control message: %+v", resp.Messages[0])
+	}
+}

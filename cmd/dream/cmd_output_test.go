@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/acumen-ai-org/robotdreams/internal/orgchart"
+	"github.com/acumen-ai-org/robotdreams/internal/server/store"
 	"github.com/acumen-ai-org/robotdreams/pkg/updates"
 )
 
@@ -228,5 +230,82 @@ func TestWorkerEditCommandOutput(t *testing.T) {
 	if _, err := runDreamCmd(t, "worker", "edit", "ghost", "--server", addr, "--worker-id", "leaf", "--role", "architect"); err == nil ||
 		!strings.Contains(err.Error(), "HTTP 404") {
 		t.Fatalf("editing an unknown worker: %v", err)
+	}
+}
+
+func TestWorkerDeleteCommandOutput(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	addr, srv := startTestServer(t)
+	connectPair(t, addr)
+
+	adminTok, err := srv.MintAdminToken("ops", time.Hour)
+	if err != nil {
+		t.Fatalf("MintAdminToken: %v", err)
+	}
+
+	out := mustRunDreamCmd(t, "worker", "delete", "leaf", "--server", addr, "--admin-token", adminTok.Raw)
+	if out != "removed leaf\n1 removed and revoked\n" {
+		t.Fatalf("delete output = %q", out)
+	}
+	if _, err := runDreamCmd(t, "worker", "delete", "ghost", "--server", addr, "--admin-token", adminTok.Raw); err == nil ||
+		!strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("deleting an unknown worker: %v", err)
+	}
+}
+
+func TestWorkerDeleteCascadeCommandOutput(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	addr, srv := startTestServer(t)
+	connectPair(t, addr)
+
+	adminTok, err := srv.MintAdminToken("ops", time.Hour)
+	if err != nil {
+		t.Fatalf("MintAdminToken: %v", err)
+	}
+
+	out := mustRunDreamCmd(t, "worker", "delete", "lead", "--server", addr, "--admin-token", adminTok.Raw, "--cascade", "--reason", "restructure")
+	if out != "removed leaf\nremoved lead\n2 removed and revoked\n" {
+		t.Fatalf("cascade delete output = %q", out)
+	}
+}
+
+func TestWorkerDeleteWithoutAnAdminCredential(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(envDreamToken, "")
+
+	_, err := runDreamCmd(t, "worker", "delete", "leaf", "--server", "control.example.com:8080")
+	if err == nil || !strings.Contains(err.Error(), "no admin credential") {
+		t.Fatalf("delete against a remote server with no credential: %v", err)
+	}
+}
+
+func TestWorkerDeleteDoesNotMintFromADataDirWithNoControlPlane(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(envDreamToken, "")
+	empty := t.TempDir()
+
+	_, err := runDreamCmd(t, "worker", "delete", "leaf", "--server", "127.0.0.1:7420", "--data-dir", empty)
+	if err == nil || !strings.Contains(err.Error(), "no admin credential") {
+		t.Fatalf("delete against an empty data dir: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(empty, store.DBFileName)); statErr == nil {
+		t.Fatal("the CLI created control plane state while looking for a credential")
+	}
+}
+
+func TestWorkerDeleteMintsAnAdminTokenFromTheLocalDataDir(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(envDreamToken, "")
+	dataDir := t.TempDir()
+	addr, srv := startTestServerAt(t, dataDir)
+	for _, w := range []orgchart.Worker{{ID: "lead", Role: "lead"}, {ID: "leaf", Role: "worker", ReportsTo: "lead"}} {
+		if err := srv.ConnectWorker(context.Background(), w); err != nil {
+			t.Fatalf("ConnectWorker(%q): %v", w.ID, err)
+		}
+	}
+
+	out := mustRunDreamCmd(t, "worker", "delete", "leaf", "--server", addr, "--data-dir", dataDir)
+	if out != "removed leaf\n1 removed and revoked\n" {
+		t.Fatalf("delete with a locally minted token = %q", out)
 	}
 }

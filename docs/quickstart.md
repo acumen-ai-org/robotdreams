@@ -26,9 +26,10 @@ Two conventions apply CLI-wide:
   Precedence: explicit flag > environment variable > local
   auto-discovery. See [setup-guide.md](setup-guide.md).
 - **`node` is an alias for `worker`.** `dream node
-  connect|list|edit|reassign|onboard` work identically to their `dream
-  worker ...` forms — "node" is the vision-level term for the same
-  entity ([vision/core.md](vision/core.md)); `worker` stays canonical.
+  connect|list|edit|reassign|delete|onboard` work identically to their
+  `dream worker ...` forms — "node" is the vision-level term for the
+  same entity ([vision/core.md](vision/core.md)); `worker` stays
+  canonical.
 
 ## `dream server init`
 
@@ -281,6 +282,39 @@ dream worker reassign leaf1 --reports-to ""   # move to root
 ```
 
 Flags: `--reports-to`, `--server`, `--server-id`, `--worker-id`.
+
+## `dream worker delete <worker-id>`
+
+Remove a worker from the org chart and revoke its identity. **Deleting
+is permanent**, and it does two things at once: the worker leaves the
+chart, and its identity is revoked, so it cannot reconnect until an
+admin enrolls it again — a later `dream worker connect` with that id
+fails with `worker id has been revoked`. To relabel a worker instead
+use `dream worker edit`, to move one use `dream worker reassign`, and
+to lock a worker out without removing it use `dream server revoke`.
+
+By default the worker's direct reports move up to its own parent, so
+the chart stays connected; a child of a root-level worker moves to the
+root. **`--cascade` removes many workers at once**: every worker
+beneath the target is deleted and revoked as well, deepest-first, the
+target last. The command prints one `removed <id>` line per removed
+worker, then `<n> removed and revoked`.
+
+Unlike the other `dream worker` commands this one does not authenticate
+as a local worker identity: a delete revokes, so it needs the admin
+scope. Precedence: `--admin-token`, then `$DREAM_TOKEN`, then a token
+minted from the local server's data dir when `--server` is a loopback
+address — the same **local-admin bootstrap path** as `dream server
+revoke`, see [security-model.md](security-model.md).
+
+```sh
+dream worker delete leaf1 --server 127.0.0.1:7420 --reason "project closed"
+dream worker delete lead2 --cascade   # lead2 and everything beneath it
+```
+
+Flags: `--cascade`, `--reason`, `--server` (default `$DREAM_URL`, else
+`127.0.0.1:7420`), `--data-dir` (default `~/.dream/_server`, used to
+mint the local bootstrap admin token), `--admin-token`.
 
 ## `dream worker list`
 
