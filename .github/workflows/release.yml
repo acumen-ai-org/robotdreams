@@ -11,9 +11,18 @@ on:
     tags:
       - "v*"
   # release-please creates the tag with GITHUB_TOKEN, and events made with
-  # that token never start other workflows. Either give release-please a
-  # PAT (RELEASE_PLEASE_TOKEN secret) so the tag push triggers this, or run
-  # it by hand for the tag.
+  # that token never start other workflows, so the tag push above does not
+  # fire for an automated release. release-please.yml therefore calls this
+  # workflow directly: a called workflow is part of the caller's own run,
+  # so no token restriction applies and no PAT is needed.
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. v0.1.0); must already exist"
+        required: true
+        type: string
+  # Kept for re-running a release by hand, which is what every release
+  # before 0.1.5 needed.
   workflow_dispatch:
     inputs:
       tag:
