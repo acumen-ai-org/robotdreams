@@ -61,8 +61,8 @@ func LoadKeyPair(path string) (KeyPair, error) {
 	if err != nil {
 		return KeyPair{}, fmt.Errorf("identity: stat key file: %w", err)
 	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return KeyPair{}, fmt.Errorf("identity: key file %s has overly permissive mode %04o (want 0600)", path, info.Mode().Perm())
+	if err := checkKeyFileMode(path, info); err != nil {
+		return KeyPair{}, err
 	}
 
 	raw, err := os.ReadFile(path)
