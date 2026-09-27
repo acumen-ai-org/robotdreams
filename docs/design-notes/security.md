@@ -16,3 +16,7 @@
 - `nextRefreshDelay` measures `RefreshFraction` from `Token.IssuedAt`, not install time, so a slow fetch does not shorten the margin.
 - `Clock` exists so TTL and expiry logic is testable with a fake clock; `RealClock` is the nil default in `NewWorkerClient`.
 - The concurrent-reader test paces readers (`readerPauseSoRefreshGoroutineGetsCPU`) because a busy spin starves the refresh goroutine on small CI runners.
+
+## Identity key file
+
+- `LoadKeyPair` refuses a key file readable by group or other on Unix. On Windows it skips the check: Go reports `0666` for every writable file there, so the mode says nothing about who can read it. The key relies on the default ACL of the user profile (`%USERPROFILE%\.dream`), which grants access only to the user, SYSTEM and Administrators.
