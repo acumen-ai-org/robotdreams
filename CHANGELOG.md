@@ -6,6 +6,14 @@ from the Conventional Commits merged to `main`; the project adheres to
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
+## [0.1.5](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.4...v0.1.5) (2026-09-27)
+
+
+### Bug Fixes
+
+* **identity:** load the key file on windows ([#38](https://github.com/acumen-ai-org/robotdreams/issues/38)) ([1beca6e](https://github.com/acumen-ai-org/robotdreams/commit/1beca6e99307ee67a1330a6bb7bd4e702eefe340))
+* **release:** release-please builds the tag it creates ([0429ffa](https://github.com/acumen-ai-org/robotdreams/commit/0429ffa483bd645d9acdc22d541b3198ecfa6daf))
+
 ## [0.1.4](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.3...v0.1.4) (2026-09-22)
 
 
