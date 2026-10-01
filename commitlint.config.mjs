@@ -5,7 +5,11 @@
 // The rules are @commitlint/config-conventional's, written out rather
 // than extended so the file resolves without a node_modules next to it:
 // the check runs with a bare `npx -p @commitlint/cli commitlint`.
+const isDependabotCommit = (message) =>
+  message.includes("Signed-off-by: dependabot[bot] <support@github.com>");
+
 export default {
+  ignores: [isDependabotCommit],
   rules: {
     "body-leading-blank": [1, "always"],
     "body-max-line-length": [2, "always", 72],
