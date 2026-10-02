@@ -6,6 +6,13 @@ from the Conventional Commits merged to `main`; the project adheres to
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
+## [0.1.6](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.5...v0.1.6) (2026-10-01)
+
+
+### Bug Fixes
+
+* **deps:** force lodash-es 4.18 under mermaid's parser ([#48](https://github.com/acumen-ai-org/robotdreams/issues/48)) ([45b8cb3](https://github.com/acumen-ai-org/robotdreams/commit/45b8cb3b0400317bf8f077bcbbf53919b5cba7b9))
+
 ## [0.1.5](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.4...v0.1.5) (2026-09-27)
 
 
