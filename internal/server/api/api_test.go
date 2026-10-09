@@ -1465,3 +1465,85 @@ func TestDeleteWorkerEmitsVisibleControlMessage(t *testing.T) {
 		t.Fatalf("unexpected control message: %+v", resp.Messages[0])
 	}
 }
+
+func TestStorageDeleteByPrefix(t *testing.T) {
+	e := newTestEnv(t, nil)
+	alice := e.connect("alice", "contributor", "")
+	bob := e.connect("bob", "contributor", "")
+
+	e.putObject(alice.Token, "workers/alice/runs/1/out.txt", "1", "", http.StatusOK)
+	e.putObject(alice.Token, "workers/alice/runs/2/out.txt", "2", "", http.StatusOK)
+	e.putObject(alice.Token, "workers/alice/keep.txt", "k", "", http.StatusOK)
+	e.putObject(alice.Token, "shared/runs/x.txt", "x", "", http.StatusOK)
+
+	type result struct {
+		Prefix  string `json:"prefix"`
+		Deleted int    `json:"deleted"`
+		DryRun  bool   `json:"dry_run"`
+	}
+
+	if status, raw := e.do(http.MethodDelete, "/api/storage/objects?prefix=workers/alice/runs", alice.Token, nil); status != http.StatusBadRequest {
+		t.Fatalf("prefix without trailing slash: status %d, want 400; body %s", status, raw)
+	}
+	if status, raw := e.do(http.MethodDelete, "/api/storage/objects?prefix=", e.adminToken("test-admin"), nil); status != http.StatusBadRequest {
+		t.Fatalf("empty prefix: status %d, want 400; body %s", status, raw)
+	}
+	if status, raw := e.do(http.MethodDelete, "/api/storage/objects?prefix=workers/alice/&path=workers/alice/keep.txt", alice.Token, nil); status != http.StatusBadRequest {
+		t.Fatalf("path and prefix: status %d, want 400; body %s", status, raw)
+	}
+	if status, raw := e.do(http.MethodDelete, "/api/storage/objects?prefix=workers/alice/runs/", bob.Token, nil); status != http.StatusForbidden {
+		t.Fatalf("bob deleting alice's prefix: status %d, want 403; body %s", status, raw)
+	}
+	if status, raw := e.do(http.MethodDelete, "/api/storage/objects?prefix=workers/", alice.Token, nil); status != http.StatusForbidden {
+		t.Fatalf("alice deleting a prefix wider than her scope: status %d, want 403; body %s", status, raw)
+	}
+
+	status, raw := e.do(http.MethodDelete, "/api/storage/objects?prefix=workers/alice/runs/&dry_run=true", alice.Token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("dry run: status %d, body %s", status, raw)
+	}
+	var got result
+	decodeInto(t, raw, &got)
+	if got != (result{Prefix: "workers/alice/runs/", Deleted: 2, DryRun: true}) {
+		t.Fatalf("dry run = %+v", got)
+	}
+
+	status, raw = e.do(http.MethodDelete, "/api/storage/objects?prefix=workers/alice/runs/", alice.Token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("delete: status %d, body %s", status, raw)
+	}
+	decodeInto(t, raw, &got)
+	if got != (result{Prefix: "workers/alice/runs/", Deleted: 2}) {
+		t.Fatalf("delete = %+v", got)
+	}
+
+	status, raw = e.do(http.MethodGet, "/api/storage/objects?prefix=", e.adminToken("test-admin"), nil)
+	if status != http.StatusOK {
+		t.Fatalf("admin list: status %d, body %s", status, raw)
+	}
+	var list struct {
+		Objects []objectMetaView `json:"objects"`
+	}
+	decodeInto(t, raw, &list)
+	if len(list.Objects) != 2 {
+		t.Fatalf("objects left = %+v, want keep.txt and shared/runs/x.txt", list.Objects)
+	}
+
+	status, raw = e.do(http.MethodDelete, "/api/storage/objects?prefix=workers/alice/runs/", alice.Token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("repeat delete: status %d, body %s", status, raw)
+	}
+	decodeInto(t, raw, &got)
+	if got.Deleted != 0 {
+		t.Fatalf("repeat delete removed %d, want 0", got.Deleted)
+	}
+
+	status, raw = e.do(http.MethodDelete, "/api/storage/objects?prefix=shared/", e.adminToken("test-admin"), nil)
+	if status != http.StatusOK {
+		t.Fatalf("admin delete: status %d, body %s", status, raw)
+	}
+	decodeInto(t, raw, &got)
+	if got.Deleted != 1 {
+		t.Fatalf("admin delete removed %d, want 1", got.Deleted)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -38,7 +39,7 @@ func newServerCmd() *cobra.Command {
 		Use:   "server",
 		Short: "Run and administer a Robot Dreams control plane",
 	}
-	cmd.AddCommand(newServerInitCmd(), newServerRevokeCmd(), newServerRotateEnrollmentCmd(), newServerGuideCmd())
+	cmd.AddCommand(newServerInitCmd(), newServerRevokeCmd(), newServerRemoveScopeCmd(), newServerRotateEnrollmentCmd(), newServerGuideCmd())
 	return cmd
 }
 
@@ -517,4 +518,282 @@ func runServerRotateEnrollment(opts serverRotateEnrollmentOptions, out io.Writer
 		fmt.Fprintf(out, "read it with: cat %s   (or re-run with --show-token)\n", path)
 	}
 	return nil
+}
+
+type serverRemoveScopeOptions struct {
+	Scope            string
+	Root             string
+	ReportScope      string
+	ScheduleIDPrefix string
+	StoragePrefixes  []string
+	DryRun           bool
+	Server           string
+	DataDir          string
+	AdminToken       string
+}
+
+// removeScopeResult is what a remove-scope run removed, or with DryRun would
+// remove. Every field describes what was actually present: a target that was
+// already gone contributes nothing.
+type removeScopeResult struct {
+	Scope           string         `json:"scope"`
+	DryRun          bool           `json:"dry_run"`
+	Root            string         `json:"root,omitempty"`
+	RootFound       bool           `json:"root_found"`
+	Workers         []string       `json:"workers"`
+	Schedules       []string       `json:"schedules"`
+	Objects         map[string]int `json:"objects"`
+	ReportInstances int            `json:"report_instances"`
+	ReportEvents    int            `json:"report_events"`
+}
+
+func newServerRemoveScopeCmd() *cobra.Command {
+	var opts serverRemoveScopeOptions
+
+	cmd := &cobra.Command{
+		Use:   "remove-scope <scope>",
+		Short: "Remove everything a scope left on this control plane",
+		Long: "Remove everything a scope left on this control plane, so it can move\n" +
+			"to another one.\n\n" +
+			"Four steps, in order, each over the API and each idempotent — a target\n" +
+			"that is already gone is nothing to do, not an error:\n\n" +
+			"  1. with --root, delete that worker and every worker beneath it\n" +
+			"     (cascade); each removed id is revoked and cannot be reused here\n" +
+			"  2. delete every schedule whose id starts with sched-<scope>-\n" +
+			"     (or --schedule-prefix)\n" +
+			"  3. for each --storage-prefix, delete every object under it\n" +
+			"  4. purge the report scope <scope> (or --report-scope) and every scope\n" +
+			"     nested under it\n" +
+			"     (instances and events), which is what removes it from the list\n\n" +
+			"--dry-run performs only reads and prints what each step would remove.\n\n" +
+			"Needs the admin scope. Precedence: --admin-token, then $" + envDreamToken + ",\n" +
+			"then a token minted from the local server's data dir when --server is a\n" +
+			"loopback address (or --data-dir is given); see docs/security-model.md.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.Scope = args[0]
+			_, err := runServerRemoveScope(cmd.Context(), opts, cmd.OutOrStdout())
+			return err
+		},
+	}
+
+	cmd.Flags().StringVar(&opts.Root, "root", "", "worker id whose whole subtree is deleted (omit to skip the worker step)")
+	cmd.Flags().StringVar(&opts.ReportScope, "report-scope", "", "report scope to purge, when the scope publishes reports under another path (default <scope>)")
+	cmd.Flags().StringVar(&opts.ScheduleIDPrefix, "schedule-prefix", "", "schedule id prefix to delete (default sched-<scope>-)")
+	cmd.Flags().StringArrayVar(&opts.StoragePrefixes, "storage-prefix", nil, "storage prefix to empty, ending in / (repeatable)")
+	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "only read, and print what each step would remove")
+	cmd.Flags().StringVar(&opts.Server, "server", "", "control plane address (default: $"+envDreamURL+", else 127.0.0.1"+server.DefaultAddr+")")
+	cmd.Flags().StringVar(&opts.DataDir, "data-dir", "", "control plane state directory used to mint a local admin token (default ~/.dream/_server)")
+	cmd.Flags().StringVar(&opts.AdminToken, "admin-token", "", "admin token authorizing the removal "+
+		"(precedence: this flag, then $"+envDreamToken+", then a token minted from --data-dir "+
+		"when --server is a loopback address)")
+
+	return cmd
+}
+
+func runServerRemoveScope(ctx context.Context, opts serverRemoveScopeOptions, out io.Writer) (removeScopeResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if out == nil {
+		out = io.Discard
+	}
+	scope := strings.Trim(strings.TrimSpace(opts.Scope), "/")
+	if scope == "" {
+		return removeScopeResult{}, fmt.Errorf("scope is required")
+	}
+	for _, p := range opts.StoragePrefixes {
+		if !strings.HasSuffix(p, "/") {
+			return removeScopeResult{}, fmt.Errorf("--storage-prefix %q must end with /", p)
+		}
+	}
+
+	addr := serverAddrOrEnv(opts.Server)
+	if addr == "" {
+		addr = "127.0.0.1" + server.DefaultAddr
+	}
+	token := opts.AdminToken
+	if token == "" {
+		token = dreamTokenFromEnv()
+	}
+	if token == "" {
+		token = discoverLocalAdminToken(addr, opts.DataDir)
+	}
+	if token == "" {
+		return removeScopeResult{}, fmt.Errorf("no admin credential: pass --admin-token, set %s, or run against a local server", envDreamToken)
+	}
+	client := &apiClient{baseURL: baseURLFromAddr(addr), token: token, hc: defaultHTTPClient()}
+
+	res := removeScopeResult{
+		Scope:     scope,
+		DryRun:    opts.DryRun,
+		Root:      opts.Root,
+		Workers:   []string{},
+		Schedules: []string{},
+		Objects:   map[string]int{},
+	}
+	verb := "removed"
+	if opts.DryRun {
+		verb = "would remove"
+		fmt.Fprintf(out, "dry run: nothing will be changed\n")
+	}
+
+	// 1. Workers.
+	if opts.Root == "" {
+		fmt.Fprintf(out, "workers: no --root given, skipped\n")
+	} else {
+		removed, found, err := removeScopeWorkers(ctx, client, opts.Root, opts.DryRun)
+		if err != nil {
+			return res, fmt.Errorf("workers: %w", err)
+		}
+		res.RootFound = found
+		res.Workers = removed
+		if !found {
+			fmt.Fprintf(out, "workers: %s not on this plane, nothing to do\n", opts.Root)
+		} else {
+			for _, id := range removed {
+				fmt.Fprintf(out, "workers: %s %s\n", verb, id)
+			}
+			if opts.DryRun {
+				fmt.Fprintf(out, "workers: would remove and revoke %d\n", len(removed))
+			} else {
+				fmt.Fprintf(out, "workers: removed and revoked %d\n", len(removed))
+			}
+		}
+	}
+
+	// 2. Schedules. A cascade delete already removes schedules owned by or
+	// sent to the removed workers, so in a real run this lists what is left.
+	var sched struct {
+		Schedules []scheduleView `json:"schedules"`
+	}
+	if err := client.doJSON(ctx, http.MethodGet, "/api/schedules", nil, &sched); err != nil {
+		return res, fmt.Errorf("schedules: list: %w", err)
+	}
+	schedPrefix := "sched-" + scope + "-"
+	if p := strings.TrimSpace(opts.ScheduleIDPrefix); p != "" {
+		schedPrefix = p
+	}
+	for _, s := range sched.Schedules {
+		if !strings.HasPrefix(s.ID, schedPrefix) {
+			continue
+		}
+		if !opts.DryRun {
+			err := client.doJSON(ctx, http.MethodDelete, "/api/schedules/"+url.PathEscape(s.ID), nil, nil)
+			if err != nil && !isAPIStatus(err, http.StatusNotFound) {
+				return res, fmt.Errorf("schedules: delete %s: %w", s.ID, err)
+			}
+		}
+		res.Schedules = append(res.Schedules, s.ID)
+		fmt.Fprintf(out, "schedules: %s %s\n", verb, s.ID)
+	}
+	fmt.Fprintf(out, "schedules: %s %d matching %s*\n", verb, len(res.Schedules), schedPrefix)
+
+	// 3. Storage.
+	for _, prefix := range opts.StoragePrefixes {
+		q := url.Values{"prefix": {prefix}}
+		if opts.DryRun {
+			q.Set("dry_run", "true")
+		}
+		var del struct {
+			Deleted int `json:"deleted"`
+		}
+		if err := client.doJSON(ctx, http.MethodDelete, "/api/storage/objects?"+q.Encode(), nil, &del); err != nil {
+			return res, fmt.Errorf("storage: %s: %w", prefix, err)
+		}
+		res.Objects[prefix] = del.Deleted
+		fmt.Fprintf(out, "storage: %s %d objects under %s\n", verb, del.Deleted, prefix)
+	}
+	if len(opts.StoragePrefixes) == 0 {
+		fmt.Fprintf(out, "storage: no --storage-prefix given, skipped\n")
+	}
+
+	// 4. Reports.
+	reportScope := scope
+	if r := strings.Trim(strings.TrimSpace(opts.ReportScope), "/"); r != "" {
+		reportScope = r
+	}
+	q := url.Values{"scope": {reportScope}}
+	if opts.DryRun {
+		q.Set("dry_run", "true")
+	}
+	var rep struct {
+		Instances int `json:"instances"`
+		Events    int `json:"events"`
+	}
+	if err := client.doJSON(ctx, http.MethodDelete, "/api/reports/scopes?"+q.Encode(), nil, &rep); err != nil {
+		return res, fmt.Errorf("reports: %w", err)
+	}
+	res.ReportInstances, res.ReportEvents = rep.Instances, rep.Events
+	fmt.Fprintf(out, "reports: %s %d instances and %d events at or under %s\n", verb, rep.Instances, rep.Events, reportScope)
+
+	objects := 0
+	for _, n := range res.Objects {
+		objects += n
+	}
+	fmt.Fprintf(out, "summary for %s: %s %d workers, %d schedules, %d objects, %d report instances, %d report events\n",
+		scope, verb, len(res.Workers), len(res.Schedules), objects, res.ReportInstances, res.ReportEvents)
+	return res, nil
+}
+
+// removeScopeWorkers deletes root and its subtree, or with dryRun lists them.
+// found is false when root is not on the chart.
+func removeScopeWorkers(ctx context.Context, client *apiClient, root string, dryRun bool) (removed []string, found bool, err error) {
+	if !dryRun {
+		var del workerDeleteResult
+		err := client.doJSON(ctx, http.MethodDelete,
+			"/api/workers/"+url.PathEscape(root)+"?"+url.Values{
+				"cascade": {"true"},
+				"reason":  {"scope removed via dream server remove-scope"},
+			}.Encode(), nil, &del)
+		if isAPIStatus(err, http.StatusNotFound) {
+			return []string{}, false, nil
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		if del.Removed == nil {
+			del.Removed = []string{}
+		}
+		return del.Removed, true, nil
+	}
+
+	var list struct {
+		Workers []struct {
+			ID        string `json:"id"`
+			ReportsTo string `json:"reports_to"`
+		} `json:"workers"`
+	}
+	if err := client.doJSON(ctx, http.MethodGet, "/api/workers", nil, &list); err != nil {
+		return nil, false, err
+	}
+	children := map[string][]string{}
+	for _, w := range list.Workers {
+		if w.ID == root {
+			found = true
+		}
+		children[w.ReportsTo] = append(children[w.ReportsTo], w.ID)
+	}
+	if !found {
+		return []string{}, false, nil
+	}
+	removed = []string{}
+	queue := []string{root}
+	seen := map[string]bool{}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		removed = append(removed, id)
+		queue = append(queue, children[id]...)
+	}
+	return removed, true, nil
+}
+
+func isAPIStatus(err error, status int) bool {
+	var apiErr *apiError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == status
 }

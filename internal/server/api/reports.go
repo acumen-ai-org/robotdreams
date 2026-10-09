@@ -577,3 +577,42 @@ func containsString(set []string, v string) bool {
 	}
 	return false
 }
+
+// handleReportScopeDelete purges every report instance and event at or below
+// a scope. Report scopes have no entity of their own — they are the grouping of
+// the rows — so removing the rows is what removes the scope. Admin only.
+// With dry_run=true it reports the counts without deleting.
+func (a *API) handleReportScopeDelete(w http.ResponseWriter, r *http.Request) {
+	claims, _ := ClaimsFromContext(r.Context())
+	if !isAdmin(claims) {
+		writeError(w, http.StatusForbidden, "admin scope required")
+		return
+	}
+
+	q := r.URL.Query()
+	scope := normalizeScope(q.Get("scope"))
+	if scope == "" {
+		writeError(w, http.StatusBadRequest, "scope query parameter is required")
+		return
+	}
+	dryRun := q.Get("dry_run") == "true"
+
+	var instances, events int
+	var err error
+	if dryRun {
+		instances, events, err = a.srv.Store().CountReportScope(r.Context(), scope)
+	} else {
+		instances, events, err = a.srv.Store().DeleteReportScope(r.Context(), scope)
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not purge report scope")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"scope":     scope,
+		"instances": instances,
+		"events":    events,
+		"dry_run":   dryRun,
+	})
+}

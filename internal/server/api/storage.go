@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/acumen-ai-org/robotdreams/pkg/storage"
@@ -147,9 +148,18 @@ func (a *API) listObjects(w http.ResponseWriter, r *http.Request, prefix string)
 func (a *API) handleDeleteObject(w http.ResponseWriter, r *http.Request) {
 	claims, _ := ClaimsFromContext(r.Context())
 
-	path := r.URL.Query().Get("path")
-	if path == "" {
-		writeError(w, http.StatusBadRequest, "path query parameter is required")
+	q := r.URL.Query()
+	path := q.Get("path")
+	_, hasPrefix := q["prefix"]
+	switch {
+	case path != "" && hasPrefix:
+		writeError(w, http.StatusBadRequest, "supply either path or prefix, not both")
+		return
+	case hasPrefix:
+		a.deleteObjectsByPrefix(w, r, q.Get("prefix"), q.Get("dry_run") == "true")
+		return
+	case path == "":
+		writeError(w, http.StatusBadRequest, "one of path or prefix is required")
 		return
 	}
 	if !hasStorageScope(claims, "write", path) {
@@ -169,6 +179,55 @@ func (a *API) handleDeleteObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// deleteObjectsByPrefix removes every object under prefix. The prefix must
+// name a directory (end with "/"), so a delete can never match a sibling such
+// as "workers/a" matching "workers/ab/", and the caller's write scope must
+// cover the whole prefix. With dryRun it only counts. An empty prefix is
+// "nothing to delete", not an error.
+func (a *API) deleteObjectsByPrefix(w http.ResponseWriter, r *http.Request, prefix string, dryRun bool) {
+	claims, _ := ClaimsFromContext(r.Context())
+	if !strings.HasSuffix(prefix, "/") {
+		writeError(w, http.StatusBadRequest, "prefix must end with /")
+		return
+	}
+	if !hasStorageScope(claims, "write", prefix) {
+		writeError(w, http.StatusForbidden, "token is not scoped for write access to this prefix")
+		return
+	}
+
+	metas, err := a.srv.Storage().List(r.Context(), prefix)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not list objects")
+		return
+	}
+
+	deleted := 0
+	for _, m := range metas {
+		if !strings.HasPrefix(m.Path, prefix) {
+			continue
+		}
+		if dryRun {
+			deleted++
+			continue
+		}
+		err := a.srv.Storage().Delete(r.Context(), m.Path)
+		switch {
+		case err == nil:
+			deleted++
+		case errors.Is(err, storage.ErrNotFound):
+		default:
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("could not delete object %q after deleting %d", m.Path, deleted))
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"prefix":  prefix,
+		"deleted": deleted,
+		"dry_run": dryRun,
+	})
 }
 
 func parsePositiveInt(raw string) (int, error) {

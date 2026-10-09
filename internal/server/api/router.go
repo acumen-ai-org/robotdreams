@@ -54,6 +54,7 @@ func NewAPIRouter(a *API) http.Handler {
 
 	mux.HandleFunc("GET /api/reports/definitions", a.withAuth(a.handleReportDefinitions))
 	mux.HandleFunc("GET /api/reports/scopes", a.withAuth(a.handleReportScopes))
+	mux.HandleFunc("DELETE /api/reports/scopes", a.withAuth(a.handleReportScopeDelete))
 	mux.HandleFunc("GET /api/reports/summary", a.withAuth(a.handleReportSummary))
 	mux.HandleFunc("GET /api/reports/report", a.withAuth(a.handleReport))
 	mux.HandleFunc("GET /api/reports/timeline", a.withAuth(a.handleReportTimeline))
