@@ -333,3 +333,72 @@ func TestReportTimeLayoutSortsLexicographically(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteReportScopeIsPrefixAware(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	base := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+	scopes := []string{"captario", "captario/x/y", "captarios", "other/captario", "capt_rio", "capt%"}
+	for i, scope := range scopes {
+		if err := s.InsertReportInstance(ctx, reportInstance("deploy", scope, base.Add(time.Duration(i)*time.Minute))); err != nil {
+			t.Fatalf("InsertReportInstance %q: %v", scope, err)
+		}
+		if err := s.InsertReportEvents(ctx, "deploy", scope, []reporting.Event{
+			{T: base, Type: "deployed", Severity: "info"},
+			{T: base.Add(time.Second), Type: "deployed", Severity: "info"},
+		}); err != nil {
+			t.Fatalf("InsertReportEvents %q: %v", scope, err)
+		}
+	}
+
+	ci, ce, err := s.CountReportScope(ctx, "captario")
+	if err != nil {
+		t.Fatalf("CountReportScope: %v", err)
+	}
+	if ci != 2 || ce != 4 {
+		t.Fatalf("count = %d instances, %d events; want 2, 4", ci, ce)
+	}
+
+	inst, ev, err := s.DeleteReportScope(ctx, "captario")
+	if err != nil {
+		t.Fatalf("DeleteReportScope: %v", err)
+	}
+	if inst != 2 || ev != 4 {
+		t.Fatalf("deleted %d instances, %d events; want 2, 4", inst, ev)
+	}
+
+	left, err := s.ListReportScopes(ctx, time.Time{})
+	if err != nil {
+		t.Fatalf("ListReportScopes: %v", err)
+	}
+	var got []string
+	for _, c := range left {
+		got = append(got, c.Path)
+	}
+	want := []string{"capt%", "capt_rio", "captarios", "other/captario"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("scopes left = %v, want %v", got, want)
+	}
+	events, err := s.ListReportEvents(ctx, ReportEventFilter{})
+	if err != nil {
+		t.Fatalf("ListReportEvents: %v", err)
+	}
+	if len(events) != 8 {
+		t.Fatalf("events left = %d, want 8", len(events))
+	}
+
+	// LIKE wildcards in the scope are literal: "capt_" must not match "captarios".
+	if inst, ev, err := s.DeleteReportScope(ctx, "capt_rio"); err != nil || inst != 1 || ev != 2 {
+		t.Fatalf("delete capt_rio = %d, %d, %v; want 1, 2, nil", inst, ev, err)
+	}
+	if inst, _, err := s.DeleteReportScope(ctx, "capt%"); err != nil || inst != 1 {
+		t.Fatalf("delete capt%% = %d, %v; want 1, nil", inst, err)
+	}
+	if inst, ev, err := s.DeleteReportScope(ctx, "captario"); err != nil || inst != 0 || ev != 0 {
+		t.Fatalf("second delete = %d, %d, %v; want 0, 0, nil", inst, ev, err)
+	}
+	if _, _, err := s.DeleteReportScope(ctx, ""); err == nil {
+		t.Fatal("empty scope accepted")
+	}
+}

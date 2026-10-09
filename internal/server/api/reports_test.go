@@ -992,3 +992,64 @@ func TestReportPeriod(t *testing.T) {
 		t.Fatalf("no-period error_count = %v, want the newest instance's 30", got)
 	}
 }
+
+func TestReportScopeDelete(t *testing.T) {
+	e := newReportsTestEnv(t)
+	w := e.connect("w1", "node", "")
+	base := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+	for _, scope := range []string{"captario", "captario/x/y", "captarios"} {
+		e.postInstance(w.Token, reporting.Instance{
+			Definition: "deploy", Scope: scope, ProducedAt: base,
+			KPIs: map[string]float64{"deploys": 1},
+		})
+	}
+	admin := e.adminToken("test-admin")
+
+	if status, raw := e.do(http.MethodDelete, "/api/reports/scopes?scope=captario", w.Token, nil); status != http.StatusForbidden {
+		t.Fatalf("non-admin: status %d, want 403; body %s", status, raw)
+	}
+	if status, raw := e.do(http.MethodDelete, "/api/reports/scopes?scope=", admin, nil); status != http.StatusBadRequest {
+		t.Fatalf("empty scope: status %d, want 400; body %s", status, raw)
+	}
+	if status, raw := e.do(http.MethodDelete, "/api/reports/scopes?scope=/", admin, nil); status != http.StatusBadRequest {
+		t.Fatalf("slash-only scope: status %d, want 400; body %s", status, raw)
+	}
+
+	type purge struct {
+		Scope     string `json:"scope"`
+		Instances int    `json:"instances"`
+		Events    int    `json:"events"`
+		DryRun    bool   `json:"dry_run"`
+	}
+	status, raw := e.do(http.MethodDelete, "/api/reports/scopes?scope=captario&dry_run=true", admin, nil)
+	if status != http.StatusOK {
+		t.Fatalf("dry run: status %d, body %s", status, raw)
+	}
+	var got purge
+	decodeInto(t, raw, &got)
+	if got != (purge{Scope: "captario", Instances: 2, DryRun: true}) {
+		t.Fatalf("dry run = %+v", got)
+	}
+
+	status, raw = e.do(http.MethodDelete, "/api/reports/scopes?scope=captario/", admin, nil)
+	if status != http.StatusOK {
+		t.Fatalf("delete: status %d, body %s", status, raw)
+	}
+	decodeInto(t, raw, &got)
+	if got != (purge{Scope: "captario", Instances: 2}) {
+		t.Fatalf("delete = %+v", got)
+	}
+
+	status, raw = e.do(http.MethodGet, "/api/reports/scopes", w.Token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET scopes: status %d, body %s", status, raw)
+	}
+	var list struct {
+		Scopes []reportScopeView `json:"scopes"`
+	}
+	decodeInto(t, raw, &list)
+	if len(list.Scopes) != 1 || list.Scopes[0].Path != "captarios" {
+		t.Fatalf("scopes after purge = %+v, want only captarios", list.Scopes)
+	}
+}

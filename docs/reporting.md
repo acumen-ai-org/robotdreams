@@ -44,12 +44,13 @@ empty scope is the root and sees everything.
 
 All routes require a bearer token (same auth model as the rest of the
 API). Reads are available to any authenticated token; writes to any
-connected worker.
+connected worker; the scope purge to admins only.
 
 | Route | Purpose |
 | --- | --- |
 | `GET /api/reports/definitions` | Registered definitions: `{"definitions": [Definition…]}` (full definition JSON, snake_case). |
 | `GET /api/reports/scopes` | Distinct scope paths with instance counts: `{"scopes": [{"path": "...", "depth": 2, "level": "world", "instances": 5}…]}`, sorted by path. An optional `?since=<RFC3339>` adds `"recent"` to each entry — the instances produced after that instant, which is what a reader means by "reports this week"; `instances` is the whole retained history and only ever grows. Omitted entirely when no `since` is given, so a client can tell "none lately" from "not asked". Note that retention prunes per definition and scope, so a long window can be truncated. |
+| `DELETE /api/reports/scopes?scope=S` | **Admin only** (403 otherwise; 400 for an empty scope). Purges every instance and event whose scope is S or nested beneath it (`S/…`, the same set `ScopeWithin` admits — `S` does not match a sibling `Ss`). A scope has no entity of its own, so this is what removes it from the list. Answers `{"scope": S, "instances": N, "events": M, "dry_run": false}`; with `?dry_run=true` it only counts. Purging an absent scope answers zeros. |
 | `GET /api/reports/summary?scope=S&category=C&period=P&at=T` | Aggregate dashboard at scope S: `{"scope": S, "tiles": [SummaryView…]}` — one tile per definition with ≥1 contributing instance, optionally filtered to a category. Tiles sorted by definition name. Each tile carries `contributors`: one entry per instance behind the aggregate — `{scope, producer, produced_at}`, in produced_at order — so a reader of a rolled-up number can see which node actually wrote it. `producer` is the authenticated worker recorded at ingest, and is omitted for an instance submitted without one. The older `scopes` field is the same information minus the producer, name-sorted, and is unchanged. |
 | `GET /api/reports/report?definition=D&scope=S&period=P&at=T` | One report at one scope: `{"definition": {...}, "summary": SummaryView, "timeline": {"events": [Event…], "spans": [{"name","start","end","label","scope"}…]}, "plan": PlanView\|null, "panels": [Panel…], "drilldowns": ["incident"…]}`. |
 | `GET /api/reports/timeline?scope=S&category=C&since=RFC3339&period=P&at=T` | Merged, sampled events across definitions at scope S. `{"events": [Event…]}`. |
