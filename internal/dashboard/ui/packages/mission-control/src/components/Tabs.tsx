@@ -54,7 +54,7 @@ export function Tabs({ tabs, active, onSelect, label, variant = "tabs", classNam
       if (!isTabs || !onSelect) return;
       const i = tabs.findIndex((t) => t.id === active);
       if (i < 0) return;
-      let next = i;
+      let next: number;
       if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
       else if (e.key === "ArrowLeft") next = (i - 1 + tabs.length) % tabs.length;
       else if (e.key === "Home") next = 0;
