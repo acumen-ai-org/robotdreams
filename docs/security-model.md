@@ -98,6 +98,16 @@ admin token from the local server's data directory when `--server` is
 a loopback address — the same **filesystem-access bootstrap** as `dream
 server revoke`, with the same caveat under "Known limitations" below.
 
+Two bulk deletes exist for moving a scope off a plane (`dream server
+remove-scope`). `DELETE /api/reports/scopes?scope=S` purges every
+report instance and event at or beneath S and is admin-only, like the
+worker delete: report data is written by many workers and owned by none.
+`DELETE /api/storage/objects?prefix=P/` deletes every object under P
+and is checked like a single delete — the caller's `storage:write`
+scope must cover the whole prefix, so a worker may empty its own
+`workers/<id>/` but not `workers/`. The prefix must end with `/`, which
+also refuses the empty "everything" prefix even to an admin.
+
 ### Delegated (ephemeral) child workers
 
 A connected worker can mint a credential for a short-lived child of its

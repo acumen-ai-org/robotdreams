@@ -274,3 +274,73 @@ func (s *Store) ListReportScopes(ctx context.Context, since time.Time) ([]Report
 	}
 	return out, nil
 }
+
+// reportScopeClause matches a scope and every scope nested beneath it, the
+// same set reporting.ScopeWithin admits for stored (normalized) paths: the
+// scope itself, or anything continuing with "/". LIKE wildcards in the scope
+// are escaped so "a_b" never matches "axb".
+const reportScopeClause = `(scope = ? OR scope LIKE ? ESCAPE '\')`
+
+func reportScopeArgs(scope string) []any {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(scope)
+	return []any{scope, escaped + "/%"}
+}
+
+// CountReportScope reports how many report instances and events lie at or
+// below scope, without changing anything.
+func (s *Store) CountReportScope(ctx context.Context, scope string) (instances, events int, err error) {
+	if scope == "" {
+		return 0, 0, fmt.Errorf("server/store: count report scope: scope is required")
+	}
+	args := reportScopeArgs(scope)
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM report_instances WHERE `+reportScopeClause, args...).Scan(&instances); err != nil {
+		return 0, 0, fmt.Errorf("server/store: count report instances: %w", err)
+	}
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM report_events WHERE `+reportScopeClause, args...).Scan(&events); err != nil {
+		return 0, 0, fmt.Errorf("server/store: count report events: %w", err)
+	}
+	return instances, events, nil
+}
+
+// DeleteReportScope removes every report instance and event at or below
+// scope, in one transaction, and returns how many of each it removed. A scope
+// with no data is not an error: both counts are zero.
+func (s *Store) DeleteReportScope(ctx context.Context, scope string) (instances, events int, err error) {
+	if scope == "" {
+		return 0, 0, fmt.Errorf("server/store: delete report scope: scope is required")
+	}
+	args := reportScopeArgs(scope)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, fmt.Errorf("server/store: delete report scope: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM report_instances WHERE `+reportScopeClause, args...)
+	if err != nil {
+		return 0, 0, fmt.Errorf("server/store: delete report instances: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, 0, fmt.Errorf("server/store: delete report instances: %w", err)
+	}
+	instances = int(n)
+
+	res, err = tx.ExecContext(ctx, `DELETE FROM report_events WHERE `+reportScopeClause, args...)
+	if err != nil {
+		return 0, 0, fmt.Errorf("server/store: delete report events: %w", err)
+	}
+	n, err = res.RowsAffected()
+	if err != nil {
+		return 0, 0, fmt.Errorf("server/store: delete report events: %w", err)
+	}
+	events = int(n)
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("server/store: delete report scope: %w", err)
+	}
+	return instances, events, nil
+}

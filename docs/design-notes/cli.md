@@ -30,6 +30,9 @@
 - `checkTransportSecurity` loads the TLS pair before serving so a typo fails with a clear message rather than inside `ServeTLS` after the banner printed.
 - `mintLocalAdminToken` closes its short-lived `*server.Server` before returning so two processes' handles on the same SQLite files overlap for as little time as possible; `adminTokenTTL` only needs to survive one round trip.
 - `runServerRotateEnrollment` refuses a directory without `server.ServerKeyFileName`: rotating into an empty directory would create an orphan token no server reads.
+- `runServerRemoveScope` works over HTTP against the running server rather than opening its data dir, so it behaves the same against a remote plane and never writes SQLite under a live process; only the admin token is minted locally, as `dream worker delete` does.
+- `remove-scope` treats a 404 from the worker or schedule delete as already done, so a run interrupted halfway is finished by running it again; `--dry-run` asks the new DELETE routes for counts (`dry_run=true`) instead of adding read routes that exist only to preview a delete.
+- Schedules are matched by the `sched-<scope>-` id prefix, the naming a client uses when it registers a scope's schedules; the cascade has already removed any schedule owned by or sent to a removed worker, so this step catches the ones owned elsewhere.
 
 ## dream dashboard
 - `runDashboard` (standalone) exists for a control plane reachable only over the network; in-process `dream server init` mounts the same handler via `withDashboardMounted` with an empty apiBase so `app.js` calls `/api/*` relative to the serving origin and needs no cross-origin setup.

@@ -118,6 +118,47 @@ dream server revoke leaf1 --server 127.0.0.1:7420 --reason "key suspected leaked
 Flags: `--data-dir` (default `~/.dream/_server`, used to mint the local
 bootstrap admin token), `--server` (default `127.0.0.1:7420`), `--reason`.
 
+## `dream server remove-scope <scope>`
+
+Remove everything a scope left on this control plane — typically
+because it moved to another one. Four steps, in order, each idempotent
+(a target that is already gone is "nothing to do", not an error):
+
+1. with `--root`, delete that worker and every worker beneath it
+   (`DELETE /api/workers/{id}?cascade=true`); each removed id is
+   revoked and cannot be reused on this plane, and schedules owned by
+   or sent to a removed worker go with it
+2. delete every remaining schedule whose id starts with `sched-<scope>-`
+   (or `--schedule-prefix`)
+3. for each `--storage-prefix`, delete every object under it
+4. purge the report scope `<scope>` (or `--report-scope`, for a client
+   that publishes under its own prefix) and every scope nested beneath it
+   (instances and events) — the only way a report scope leaves
+   `GET /api/reports/scopes`
+
+`--dry-run` performs only reads and prints what each step would remove.
+The command prints one line per removed item, a count per step, and a
+final `summary for <scope>: ...` line; it exits non-zero only on a real
+error.
+
+It needs the admin scope, resolved like `dream worker delete`:
+`--admin-token`, then `$DREAM_TOKEN`, then a token minted from
+`--data-dir` (when given, or the default when `--server` is a loopback
+address).
+
+```sh
+dream server remove-scope captario --root censio-captario \
+  --storage-prefix workers/censio-captario/ --dry-run
+kubectl exec deploy/dream-server -- dream server remove-scope captario \
+  --root censio-captario --data-dir /data
+```
+
+Flags: `--root` (optional; omit to skip the worker step),
+`--report-scope`, `--schedule-prefix`,
+`--storage-prefix` (repeatable, must end with `/`), `--dry-run`,
+`--server` (default `$DREAM_URL`, else `127.0.0.1:7420`), `--data-dir`
+(default `~/.dream/_server`), `--admin-token`.
+
 ## `dream worker connect`
 
 Register this worker with a control plane. Generates (or reuses) an
