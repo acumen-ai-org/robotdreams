@@ -6,6 +6,18 @@ from the Conventional Commits merged to `main`; the project adheres to
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
+## [0.1.7](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.6...v0.1.7) (2026-10-09)
+
+
+### Features
+
+* **server:** remove a scope from a control plane ([#53](https://github.com/acumen-ai-org/robotdreams/issues/53)) ([2ff849b](https://github.com/acumen-ai-org/robotdreams/commit/2ff849b246eb8b03248a461b4d45053cd721e9aa))
+
+
+### Bug Fixes
+
+* **deps:** golang.org/x/net v0.60.0 for GO-2026-6617 ([#54](https://github.com/acumen-ai-org/robotdreams/issues/54)) ([1249005](https://github.com/acumen-ai-org/robotdreams/commit/1249005fbea3b80730e418a50f3e5a344248ec25))
+
 ## [0.1.6](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.5...v0.1.6) (2026-10-01)
 
 
