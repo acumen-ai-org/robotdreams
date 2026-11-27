@@ -6,6 +6,13 @@ from the Conventional Commits merged to `main`; the project adheres to
 1.0. Pre-1.0, only the latest release is supported (see
 [SECURITY.md](SECURITY.md)).
 
+## [0.1.8](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.7...v0.1.8) (2026-11-27)
+
+
+### Bug Fixes
+
+* **deps:** update every dependency to its latest release ([#76](https://github.com/acumen-ai-org/robotdreams/issues/76)) ([9957c8b](https://github.com/acumen-ai-org/robotdreams/commit/9957c8b1f4d39c7b9f58015670912112e55c966a))
+
 ## [0.1.7](https://github.com/acumen-ai-org/robotdreams/compare/v0.1.6...v0.1.7) (2026-10-09)
 
 
