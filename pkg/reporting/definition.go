@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // DefinitionVersion and DefinitionKind are the only accepted version and kind of a ReportDefinition document.

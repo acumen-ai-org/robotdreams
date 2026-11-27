@@ -4,7 +4,7 @@ Thanks for your interest in contributing.
 
 ## Getting started
 
-1. Install Go 1.25 or newer (required by `go.mod`, due to
+1. Install Go 1.27 or newer (required by `go.mod`, due to
    `modernc.org/sqlite` and the Temporal SDK).
 2. Fork and clone the repository.
 3. Install Node 22+ if you want Mission Control (the dashboard) in your

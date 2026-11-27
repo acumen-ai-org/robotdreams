@@ -33,7 +33,7 @@
 #     --tls-cert/--tls-key unless --insecure is passed; a container must
 #     bind a non-loopback address to be reachable at all, hence the flag.
 
-FROM node:22-alpine AS ui
+FROM node:26-alpine AS ui
 WORKDIR /src/internal/dashboard/ui
 COPY internal/dashboard/ui/package.json internal/dashboard/ui/package-lock.json ./
 COPY internal/dashboard/ui/app/package.json app/
@@ -43,7 +43,7 @@ COPY internal/dashboard/ui/ ./
 # vite.config.ts writes to ../../web/dist, i.e. /src/internal/dashboard/web/dist.
 RUN npm run build
 
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -57,7 +57,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X main.version=${VERSION}" \
       -o /dream ./cmd/dream
 
-FROM alpine:3.21
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates \
  && adduser -D -u 1001 dream \
  && mkdir -p /data && chown 1001:1001 /data

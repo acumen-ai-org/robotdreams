@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // LoadDefinitionFile reads and parses one ReportDefinition file with ParseDefinition's validation.
