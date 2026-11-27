@@ -42,7 +42,7 @@ func NewWithClock(root string, clock security.Clock) (*Backend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("localfs: resolving root %q: %w", root, err)
 	}
-	if err := os.MkdirAll(absRoot, 0o750); err != nil {
+	if err := os.MkdirAll(absRoot, 0o750); err != nil { //nolint:gosec // G703: the operator names the storage root
 		return nil, fmt.Errorf("localfs: creating root %q: %w", absRoot, err)
 	}
 	return &Backend{root: absRoot, clock: clock}, nil

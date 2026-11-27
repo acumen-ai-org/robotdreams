@@ -66,7 +66,7 @@ below.
 
 ## Prerequisites
 
-- **Go 1.25 or newer.** `go.mod` requires it — both `modernc.org/sqlite`
+- **Go 1.27 or newer.** `go.mod` requires it — both `modernc.org/sqlite`
   and the Temporal SDK need a current Go toolchain. Check with `go version`.
 - **Node 22+** to build a binary that includes Mission Control (the
   dashboard). Its Vite build output is not committed; `make build`

@@ -3,7 +3,6 @@
   "compilerOptions": {
     "types": ["vite/client"],
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
       "@robotdreams/mission-control": ["../packages/mission-control/src/index.ts"],
       "@robotdreams/mission-control/style.css": ["../packages/mission-control/src/style.css"],
